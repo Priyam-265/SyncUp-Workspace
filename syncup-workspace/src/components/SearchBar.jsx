@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { searchApi } from '../services/api';
 import { Search, Loader, X, Hash, User, MessageSquare } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 const useDebounce = (value, delay) => {
   const [debouncedValue, setDebouncedValue] = useState(value);
@@ -26,7 +26,10 @@ const SearchBar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const debouncedQuery = useDebounce(query, 300);
   const navigate = useNavigate();
+  const { workspaceId } = useParams();
   const searchRef = useRef(null);
+
+  const wsId = workspaceId || '1';
 
   useEffect(() => {
     if (debouncedQuery) {
@@ -86,7 +89,7 @@ const SearchBar = () => {
                     <h3 className="text-xs font-semibold text-slate-400 uppercase px-2 mb-1">Channels</h3>
                     <ul>
                       {results.channels.map(channel => (
-                        <li key={`ch-${channel.id}`} onClick={() => handleResultClick(`/dashboard/1/channel/${channel.id}`)} className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer">
+                        <li key={`ch-${channel.id}`} onClick={() => handleResultClick(`/dashboard/${wsId}/channel/${channel.id}`)} className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer">
                           <Hash className="w-4 h-4 text-slate-500" />
                           <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{channel.name}</span>
                         </li>
@@ -99,8 +102,10 @@ const SearchBar = () => {
                     <h3 className="text-xs font-semibold text-slate-400 uppercase px-2 mb-1">Users</h3>
                     <ul>
                       {results.users.map(user => (
-                        <li key={`usr-${user.id}`} onClick={() => handleResultClick(`/dm/${user.id}`)} className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer">
-                          <img src={user.avatar} alt={user.name} className="w-6 h-6 rounded-full" />
+                        <li key={`usr-${user.id}`} onClick={() => handleResultClick(`/dashboard/${wsId}/dm/${user.id}`)} className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer">
+                          <div className={`w-6 h-6 bg-gradient-to-br ${user.color || 'from-blue-500 to-cyan-500'} rounded-full flex items-center justify-center text-white font-bold text-[10px]`}>
+                            {user.avatar}
+                          </div>
                           <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{user.name}</span>
                         </li>
                       ))}
@@ -112,9 +117,22 @@ const SearchBar = () => {
                     <h3 className="text-xs font-semibold text-slate-400 uppercase px-2 mb-1">Messages</h3>
                     <ul>
                       {results.messages.map(message => (
-                        <li key={`msg-${message.id}`} onClick={() => handleResultClick(`/dashboard/1/channel/${message.channelId}`)} className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer">
-                          <MessageSquare className="w-4 h-4 text-slate-500" />
-                          <span className="text-sm text-slate-600 dark:text-slate-400 truncate">{message.text}</span>
+                        <li
+                          key={`msg-${message.type}-${message.id}-${message.channelId || message.dmUserId}`}
+                          onClick={() => {
+                            if (message.type === 'channel') {
+                              handleResultClick(`/dashboard/${wsId}/channel/${message.channelId}`);
+                            } else {
+                              handleResultClick(`/dashboard/${wsId}/dm/${message.dmUserId}`);
+                            }
+                          }}
+                          className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+                        >
+                          <MessageSquare className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                          <div className="min-w-0">
+                            <span className="text-sm text-slate-600 dark:text-slate-400 truncate block">{message.text}</span>
+                            <span className="text-xs text-slate-400 dark:text-slate-500">{message.senderName} · {message.time}</span>
+                          </div>
                         </li>
                       ))}
                     </ul>

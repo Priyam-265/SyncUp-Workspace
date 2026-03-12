@@ -10,6 +10,7 @@ import CreateChannelModal from '../components/CreateChannelModal';
 import CreateDirectMessageModal from '../components/CreateDirectMessageModal';
 import AddMemberModal from '../components/AddMemberModal';
 import { useTheme } from '../context/ThemeContext';
+import { useWorkspace } from '../context/WorkspaceContext';
 import { users as mockUsers, channels as initialChannels, messages as initialMessages } from '../data/mockData';
 
 // Sample workspaces for dashboard
@@ -22,6 +23,7 @@ const DashboardPage = () => {
   const navigate = useNavigate();
   const { workspaceId, channelId, userId } = useParams();
   const { darkMode, toggleDarkMode, currentUser, logout } = useTheme();
+  const { createInvite } = useWorkspace();
 
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [activeChat, setActiveChat] = useState(null);
@@ -176,6 +178,17 @@ const DashboardPage = () => {
     <div className="h-screen flex">
       {/* Workspace Switcher Bar */}
       <div className="w-[72px] bg-slate-900 dark:bg-[#1a1e25] flex flex-col items-center py-4 gap-3 border-r border-slate-800 dark:border-[#76ABAE]/10">
+        {/* Back to Workspaces */}
+        <button
+          onClick={() => navigate('/workspaces')}
+          className="w-12 h-12 rounded-2xl bg-slate-800 dark:bg-[#31363F] hover:bg-slate-700 dark:hover:bg-[#76ABAE]/20 flex items-center justify-center transition-all hover:rounded-xl mb-1 group"
+          title="Back to Workspaces"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-slate-400 dark:text-[#76ABAE] group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <div className="w-8 border-t border-slate-600 dark:border-[#76ABAE]/20 my-1"></div>
         {sampleWorkspaces.map((ws) => (
           <button
             key={ws.id}
@@ -355,6 +368,7 @@ const DashboardPage = () => {
       <AddMemberModal
         isOpen={isAddMemberModalOpen}
         onClose={() => setAddMemberModalOpen(false)}
+        workspaceId={activeWorkspace.id}
       />
 
       {/* Right Sidebar - Online Users */}

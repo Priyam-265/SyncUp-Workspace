@@ -430,7 +430,18 @@ export default function RegisterPage() {
       </div>
 
       <div className="relative z-10 w-full max-w-[480px] p-4">
-        <div ref={cardRef} className="w-full bg-white/90 dark:bg-[#31363F]/85 backdrop-blur-xl rounded-[2rem] shadow-2xl border border-slate-200/50 dark:border-[#76ABAE]/20 p-6 md:p-8 transition-colors duration-500">
+        <div ref={cardRef} className="w-full bg-white/90 dark:bg-[#31363F]/85 backdrop-blur-xl rounded-[2rem] shadow-2xl border border-slate-200/50 dark:border-[#76ABAE]/20 p-6 md:p-8 transition-colors duration-500 relative">
+
+          {/* ← Back Arrow */}
+          <button
+            onClick={() => navigate('/')}
+            className="absolute top-5 left-5 p-2 rounded-xl text-slate-400 dark:text-[#EEEEEE]/50 hover:text-blue-600 dark:hover:text-[#76ABAE] hover:bg-slate-100 dark:hover:bg-[#222831]/50 transition-all duration-200"
+            aria-label="Go back"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
           
           <div className="text-center mb-6 form-element">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-[#EEEEEE]">Welcome to <span className="text-blue-600 dark:text-[#76ABAE]">SyncUp Workspace</span></h1>
@@ -637,8 +648,19 @@ export default function RegisterPage() {
               Create Workspace Account
             </button>
           </form>
-          
 
+          {/* Sign In Link */}
+          <div className="mt-4 text-center form-element relative z-10">
+            <p className="text-sm text-slate-500 dark:text-[#EEEEEE]/70">
+              Already have an account?
+              <button
+                onClick={() => navigate('/login')}
+                className="ml-2 font-bold text-blue-600 dark:text-[#76ABAE] hover:underline transition-all"
+              >
+                Sign In
+              </button>
+            </p>
+          </div>
         </div>
       </div>
     </div>

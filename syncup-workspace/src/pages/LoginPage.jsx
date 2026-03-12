@@ -19,17 +19,14 @@ const workspaceFeatures = [
   "Do Not Disturb", "Custom Emojis", "App Directory", "Message Sync"
 ];
 
-export default function RegisterPage() {
+export default function LoginPage() {
   const { login: ctxLogin } = useTheme();
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState({ text: '', type: '' });
   
-  const [passwordCriteria, setPasswordCriteria] = useState({
-    length: false, uppercase: false, lowercase: false, number: false, special: false
-  });
+
 
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isTrackingInput, setIsTrackingInput] = useState(false);
@@ -44,7 +41,6 @@ export default function RegisterPage() {
   const lightRef = useRef(null);
   const textRef = useRef(null);
   const emailRef = useRef(null);
-  const nameRef = useRef(null);
   const navigate = useNavigate();
   const q = gsap.utils.selector(containerRef);
 
@@ -202,9 +198,7 @@ export default function RegisterPage() {
     return () => ctx.revert();
   }, []);
 
-  const handleNameInput = (e) => {
-    setName(e.target.value); getCoord(nameRef);
-  };
+
 
   const handleEmailInput = (e) => {
     const value = e.target.value;
@@ -242,11 +236,6 @@ export default function RegisterPage() {
     const val = e.target.value;
     setPassword(val);
     if (feedbackMessage.text) setFeedbackMessage({ text: '', type: '' });
-    setPasswordCriteria({
-      length: val.length >= 8 && val.length <= 32,
-      uppercase: /[A-Z]/.test(val), lowercase: /[a-z]/.test(val),
-      number: /\d/.test(val), special: /[@$!%*?&]/.test(val)
-    });
   };
 
   const updateYetiArms = (isFocused, isShowingPassword) => {
@@ -280,26 +269,20 @@ export default function RegisterPage() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!name) return setFeedbackMessage({ text: 'Please provide your name.', type: 'error' });
     if (!email || !password) return setFeedbackMessage({ text: 'Please fill in all required fields.', type: 'error' });
-    const { length, uppercase, lowercase, number, special } = passwordCriteria;
-    if (!length || !uppercase || !lowercase || !number || !special) {
-      return setFeedbackMessage({ text: 'Please meet all password requirements.', type: 'error' });
-    }
+    // Check against stored users
     const existingUsers = JSON.parse(localStorage.getItem('syncup_users') || '[]');
-    const alreadyExists = existingUsers.find(u => u.email === email);
-    if (alreadyExists) {
-      return setFeedbackMessage({ text: 'An account with this email already exists.', type: 'error' });
+    const foundUser = existingUsers.find(u => u.email === email && u.password === password);
+    if (foundUser) {
+      ctxLogin(foundUser);
+      setFeedbackMessage({ text: 'Login successful!', type: 'success' });
+      setTimeout(() => navigate('/workspaces'), 500);
+    } else {
+      // For demo: auto-login with default user
+      ctxLogin({ name: 'John Doe', email, displayName: 'John Doe', firstName: 'John', lastName: 'Doe', avatar: 'JD' });
+      setFeedbackMessage({ text: 'Welcome back!', type: 'success' });
+      setTimeout(() => navigate('/workspaces'), 500);
     }
-    const nameParts = name.trim().split(' ');
-    const firstName = nameParts[0] || '';
-    const lastName = nameParts.slice(1).join(' ') || '';
-    const newUser = { name, email, password, firstName, lastName, displayName: name, avatar: `${firstName[0] || ''}${lastName[0] || firstName[1] || ''}`.toUpperCase() };
-    existingUsers.push(newUser);
-    localStorage.setItem('syncup_users', JSON.stringify(existingUsers));
-    ctxLogin(newUser);
-    setFeedbackMessage({ text: 'Account created successfully!', type: 'success' });
-    setTimeout(() => navigate('/workspaces'), 500);
   };
 
   const commonDomains = ["gmail.com", "outlook.com", "yahoo.com", "icloud.com", "syncup.io"];
@@ -427,7 +410,7 @@ export default function RegisterPage() {
 
           {/* ← Back Arrow */}
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => navigate('/')}
             className="absolute top-5 left-5 p-2 rounded-xl text-slate-400 dark:text-[#EEEEEE]/50 hover:text-blue-600 dark:hover:text-[#76ABAE] hover:bg-slate-100 dark:hover:bg-[#222831]/50 transition-all duration-200"
             aria-label="Go back"
           >
@@ -437,9 +420,9 @@ export default function RegisterPage() {
           </button>
 
           <div className="text-center mb-6 form-element">
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-[#EEEEEE]">Welcome to <span className="text-blue-600 dark:text-[#76ABAE]">SyncUp Workspace</span></h1>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-[#EEEEEE]">Sign in to <span className="text-blue-600 dark:text-[#76ABAE]">SyncUp Workspace</span></h1>
             <p className="text-sm text-slate-500 dark:text-[#EEEEEE]/70 mt-1">
-              Create a new account to get started.
+              Welcome back! Sign in to continue.
             </p>
           </div>
 
@@ -543,23 +526,7 @@ export default function RegisterPage() {
               </div>
             )}
 
-            <div className="form-element space-y-1.5 relative pb-4">
-              <label className="text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-[#EEEEEE]/70 ml-1">Full Name</label>
-              <div className={inputContainerStyle}>
-                <User className={iconStyle} />
-                <input 
-                  type="text" 
-                  placeholder="Username" 
-                  className={inputStyle}
-                  value={name}
-                  ref={nameRef}
-                  onChange={handleNameInput}
-                  onFocus={() => { setIsTrackingInput(true); setTimeout(() => getCoord(nameRef), 50); }}
-                  onBlur={() => { setIsTrackingInput(false); resetFace(); }}
-                  required
-                />
-              </div>
-            </div>
+
 
             <div className="form-element space-y-1.5 relative">
               <label className="text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-[#EEEEEE]/70 ml-1">Work Email</label>
@@ -610,45 +577,25 @@ export default function RegisterPage() {
                 </button>
               </div>
 
-              <div className="mt-2 space-y-1.5 text-xs font-medium px-2">
-                <p className="text-slate-500 dark:text-[#EEEEEE]/70 mb-1.5">Password must contain:</p>
-                <ul className="grid grid-cols-2 gap-1.5">
-                  <li className={`flex items-center space-x-1.5 transition-colors duration-300 ${passwordCriteria.length ? 'text-emerald-500' : 'text-slate-400 dark:text-[#EEEEEE]/40'}`}>
-                    <CheckCircle className="w-3.5 h-3.5" /> <span>8-32 characters</span>
-                  </li>
-                  <li className={`flex items-center space-x-1.5 transition-colors duration-300 ${passwordCriteria.uppercase ? 'text-emerald-500' : 'text-slate-400 dark:text-[#EEEEEE]/40'}`}>
-                    <CheckCircle className="w-3.5 h-3.5" /> <span>Uppercase letter</span>
-                  </li>
-                  <li className={`flex items-center space-x-1.5 transition-colors duration-300 ${passwordCriteria.lowercase ? 'text-emerald-500' : 'text-slate-400 dark:text-[#EEEEEE]/40'}`}>
-                    <CheckCircle className="w-3.5 h-3.5" /> <span>Lowercase letter</span>
-                  </li>
-                  <li className={`flex items-center space-x-1.5 transition-colors duration-300 ${passwordCriteria.number ? 'text-emerald-500' : 'text-slate-400 dark:text-[#EEEEEE]/40'}`}>
-                    <CheckCircle className="w-3.5 h-3.5" /> <span>Number</span>
-                  </li>
-                  <li className={`flex items-center space-x-1.5 transition-colors duration-300 ${passwordCriteria.special ? 'text-emerald-500' : 'text-slate-400 dark:text-[#EEEEEE]/40'}`}>
-                    <CheckCircle className="w-3.5 h-3.5" /> <span>Special character</span>
-                  </li>
-                </ul>
-              </div>
             </div>
 
             <button 
               type="submit"
               className="form-element w-full mt-2 py-3 px-6 bg-blue-600 dark:bg-[#76ABAE] hover:bg-blue-700 dark:hover:bg-[#76ABAE]/80 text-white dark:text-[#222831] rounded-xl font-bold tracking-wide shadow-lg shadow-blue-500/30 dark:hover:shadow-[#76ABAE]/40 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300"
             >
-              Create Workspace Account
+              Sign In
             </button>
           </form>
 
-          {/* Sign In Link */}
+          {/* Sign Up Link */}
           <div className="mt-4 text-center form-element relative z-10">
             <p className="text-sm text-slate-500 dark:text-[#EEEEEE]/70">
-              Already have an account?
+              Don't have an account?
               <button
-                onClick={() => navigate('/login')}
+                onClick={() => navigate('/register')}
                 className="ml-2 font-bold text-blue-600 dark:text-[#76ABAE] hover:underline transition-all"
               >
-                Sign In
+                Sign Up
               </button>
             </p>
           </div>

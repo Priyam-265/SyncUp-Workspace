@@ -1,13 +1,158 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { gsap } from 'gsap';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Users, Hash, Zap, ArrowRight, Building2, X, Link, Mail, Copy, Check, LogIn, AtSign } from 'lucide-react';
+import { Plus, Users, Hash, Zap, ArrowRight, Building2, X, Link, Mail, Copy, Check, LogIn, AtSign, ChevronDown, LogOut, User } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
+import { useWorkspace } from '../context/WorkspaceContext';
 
-const generateInviteId = () => Math.random().toString(36).substring(2, 10).toUpperCase();
 const generateInviteLink = (id) => `https://syncup.io/join/${id}`;
+
+// ── Glass Filter SVG (required for liquid glass effect) ─────────────
+function GlassFilter() {
+  return (
+    <svg style={{ display: "none" }}>
+      <defs>
+        <filter id="glass-distortion" x="0%" y="0%" width="100%" height="100%" filterUnits="objectBoundingBox">
+          <feTurbulence type="fractalNoise" baseFrequency="0.001 0.005" numOctaves="1" seed="17" result="turbulence" />
+          <feComponentTransfer in="turbulence" result="mapped"><feFuncR type="gamma" amplitude="1" exponent="10" offset="0.5" /><feFuncG type="gamma" amplitude="0" exponent="1" offset="0" /><feFuncB type="gamma" amplitude="0" exponent="1" offset="0.5" /></feComponentTransfer>
+          <feGaussianBlur in="turbulence" stdDeviation="3" result="softMap" />
+          <feSpecularLighting in="softMap" surfaceScale="5" specularConstant="1" specularExponent="100" lightingColor="white" result="specLight"><fePointLight x="-200" y="-200" z="300" /></feSpecularLighting>
+          <feComposite in="specLight" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="litImage" />
+          <feDisplacementMap in="SourceGraphic" in2="softMap" scale="200" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+      </defs>
+    </svg>
+  );
+}
+
+// ── Logo Component ──────────────────────────────────────────────────
+function Logo({ size = 28, id = "logo" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
+      <defs><linearGradient id={id} x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#76ABAE" /><stop offset="100%" stopColor="#9ECDD0" /></linearGradient></defs>
+      <ellipse cx="38" cy="42" rx="24" ry="11" transform="rotate(-35 38 42)" fill="none" stroke={`url(#${id})`} strokeWidth="9" strokeLinecap="round" opacity=".95" />
+      <ellipse cx="62" cy="58" rx="24" ry="11" transform="rotate(-35 62 58)" fill="none" stroke={`url(#${id})`} strokeWidth="9" strokeLinecap="round" opacity=".8" />
+      <ellipse cx="50" cy="50" rx="18" ry="8" transform="rotate(55 50 50)" fill="none" stroke={`url(#${id})`} strokeWidth="6.5" strokeLinecap="round" opacity=".6" />
+    </svg>
+  );
+}
+
+// ── CSS for liquid glass navbar ─────────────────────────────────────
+const WORKSPACE_NAVBAR_CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap');
+
+:root {
+  --bg: #F0F2F5;
+  --surface: #FFFFFF;
+  --card: rgba(255,255,255,0.90);
+  --card-h: rgba(255,255,255,0.97);
+  --border: rgba(118,171,174,0.18);
+  --border-l: rgba(118,171,174,0.40);
+  --accent: #76ABAE;
+  --accent2: #9ECDD0;
+  --glow: rgba(118,171,174,0.28);
+  --t1: #1A2025;
+  --t2: rgba(26,32,37,0.60);
+  --t3: rgba(26,32,37,0.35);
+  --fd: 'Instrument Serif', Georgia, serif;
+  --fb: 'Syne', sans-serif;
+  --r: 18px;
+  --shadow-card: 0 2px 16px rgba(118,171,174,0.10), 0 1px 4px rgba(0,0,0,0.06);
+}
+
+.dark {
+  --bg: #222831;
+  --surface: #31363F;
+  --card: rgba(49,54,63,0.85);
+  --card-h: rgba(49,54,63,0.95);
+  --border: rgba(118,171,174,0.20);
+  --border-l: rgba(118,171,174,0.38);
+  --accent: #76ABAE;
+  --accent2: #9ECDD0;
+  --glow: rgba(118,171,174,0.28);
+  --t1: #EEEEEE;
+  --t2: rgba(238,238,238,0.60);
+  --t3: rgba(238,238,238,0.32);
+  --shadow-card: 0 2px 24px rgba(0,0,0,0.35);
+}
+
+.ws-lg-navbar {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
+  animation: wsNavSlideIn 0.6s cubic-bezier(.22,1,.36,1) forwards;
+}
+@keyframes wsNavSlideIn {
+  from { transform: translateX(-50%) translateY(-30px); opacity: 0; }
+  to { transform: translateX(-50%) translateY(0); opacity: 1; }
+}
+
+.ws-glass-wrapper {
+  position: relative;
+  display: flex;
+  font-family: var(--fb);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 700ms cubic-bezier(0.175, 0.885, 0.32, 2.2);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.08), 0 0 0 1px rgba(118,171,174,0.14);
+  border-radius: 9999px;
+  padding: 8px 16px 8px 12px;
+  min-width: 460px;
+  align-items: center;
+}
+.ws-glass-wrapper:hover {
+  padding: 10px 18px 10px 14px;
+}
+
+.ws-glass-blur { position: absolute; inset: 0; z-index: 0; overflow: hidden; border-radius: inherit; backdrop-filter: blur(20px) saturate(160%); -webkit-backdrop-filter: blur(20px) saturate(160%); filter: url(#glass-distortion); isolation: isolate; pointer-events: none; }
+.ws-glass-white { position: absolute; inset: 0; z-index: 1; border-radius: inherit; background: rgba(255,255,255,0.72); pointer-events: none; }
+.dark .ws-glass-white { background: rgba(49,54,63,0.78); }
+.ws-glass-shine { position: absolute; inset: 0; z-index: 2; overflow: hidden; border-radius: inherit; box-shadow: inset 2px 2px 1px 0 rgba(255,255,255,0.55), inset -1px -1px 1px 1px rgba(255,255,255,0.18); pointer-events: none; }
+.ws-glass-content { position: relative; z-index: 3; }
+
+.ws-nav-link {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--t2);
+  text-decoration: none;
+  letter-spacing: 0.01em;
+  transition: color .2s;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--fb);
+}
+.ws-nav-link:hover { color: var(--accent); }
+
+.ws-profile-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 220px;
+  background: var(--card-h);
+  border: 1px solid var(--border-l);
+  border-radius: 16px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.12), 0 0 0 1px rgba(118,171,174,0.10);
+  overflow: hidden;
+  z-index: 10001;
+  animation: dropIn 0.25s cubic-bezier(.22,1,.36,1);
+}
+@keyframes dropIn {
+  from { opacity: 0; transform: translateY(-8px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+`;
 
 const WorkspaceSelectionPage = () => {
   const navigate = useNavigate();
+  const { currentUser, logout } = useTheme();
+  const { createInvite, resolveInvite } = useWorkspace();
+
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [newWorkspace, setNewWorkspace] = useState({ name: '', icon: '🏢' });
@@ -17,18 +162,18 @@ const WorkspaceSelectionPage = () => {
   const [copiedId, setCopiedId] = useState(false);
   const [joinValue, setJoinValue] = useState('');
   const [joinError, setJoinError] = useState('');
-  const [animatedStats, setAnimatedStats] = useState([0, 0, 0]);
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
 
   const mainRef = useRef(null);
   const createModalRef = useRef(null);
   const joinModalRef = useRef(null);
   const stepRef = useRef(null);
-  const headerRef = useRef(null);
   const titleRef = useRef(null);
   const subtitleRef = useRef(null);
   const gridRef = useRef(null);
-  const statsRef = useRef(null);
+
   const overlayRef = useRef(null);
+  const profileDropdownRef = useRef(null);
 
   const workspaces = [
     { id: 1, name: 'Acme Corporation', icon: '🏢', members: 24, channels: 12, color: 'from-blue-500 to-cyan-500', lastActive: '2 minutes ago' },
@@ -37,62 +182,49 @@ const WorkspaceSelectionPage = () => {
     { id: 4, name: 'Engineering Hub', icon: '⚙️', members: 32, channels: 18, color: 'from-green-500 to-emerald-500', lastActive: '5 minutes ago' }
   ];
 
+  // Build user avatar
+  const userAvatar = currentUser.avatar || (currentUser.displayName || 'U').substring(0, 2).toUpperCase();
+  const userName = currentUser.displayName || 'User';
+  const userEmail = currentUser.email || 'user@email.com';
 
-
-  // ── 2. Master page-load timeline ───────────────────────────────
+  // Inject CSS
   useEffect(() => {
-    // Set initial hidden state BEFORE first paint — prevents flash
-    gsap.set(headerRef.current, { y: -60, opacity: 0 });
-    gsap.set('.header-logo', { rotate: -180, scale: 0, opacity: 0 });
+    const el = document.createElement("style");
+    el.id = "ws-navbar-styles";
+    el.textContent = WORKSPACE_NAVBAR_CSS;
+    if (!document.getElementById("ws-navbar-styles")) document.head.appendChild(el);
+    return () => document.getElementById("ws-navbar-styles")?.remove();
+  }, []);
+
+  // Close profile dropdown on outside click
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (profileDropdownRef.current && !profileDropdownRef.current.contains(e.target)) {
+        setShowProfileDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  // ── Animations ─────────────────────────────────────────────────────
+  useEffect(() => {
     gsap.set(titleRef.current, { opacity: 0, y: 50, skewY: 3 });
     gsap.set(subtitleRef.current, { opacity: 0, y: 25 });
     gsap.set('.workspace-card', { opacity: 0, y: 60, rotateX: 10, scale: 0.94 });
-    gsap.set('.stat-card', { opacity: 0, y: 35 });
 
-    const tl = gsap.timeline({ defaults: { ease: 'power3.out' }, delay: 0.1 });
+    const tl = gsap.timeline({ defaults: { ease: 'power3.out' }, delay: 0.2 });
 
-    // Header slides down
-    tl.to(headerRef.current,
-      { y: 0, opacity: 1, duration: 1.0 }
-    )
-    // Logo zap icon spins in
-    .to('.header-logo', { rotate: 0, scale: 1, opacity: 1, duration: 0.9, ease: 'back.out(1.7)' }, '-=0.5')
-    // Title fades up
-    .to(titleRef.current, { opacity: 1, y: 0, skewY: 0, duration: 1.1 }, '-=0.4')
-    // Subtitle fades up
-    .to(subtitleRef.current, { opacity: 1, y: 0, duration: 0.9 }, '-=0.7')
-    // Cards stagger in
-    .to('.workspace-card',
-      { opacity: 1, y: 0, rotateX: 0, scale: 1, duration: 0.85, stagger: { amount: 0.75, from: 'start' } },
-      '-=0.5'
-    )
-    // Stat cards
-    .to('.stat-card',
-      { opacity: 1, y: 0, duration: 0.7, stagger: 0.18 },
-      '-=0.4'
-    );
+    tl.to(titleRef.current, { opacity: 1, y: 0, skewY: 0, duration: 1.1 })
+      .to(subtitleRef.current, { opacity: 1, y: 0, duration: 0.9 }, '-=0.7')
+      .to('.workspace-card',
+        { opacity: 1, y: 0, rotateX: 0, scale: 1, duration: 0.85, stagger: { amount: 0.75, from: 'start' } },
+        '-=0.5'
+      );
 
-    // Animate stat numbers counting up (delayed to match when cards appear)
-    const targets = [workspaces.length, workspaces.reduce((a,w)=>a+w.members,0), workspaces.reduce((a,w)=>a+w.channels,0)];
-    targets.forEach((target, i) => {
-      const obj = { val: 0 };
-      gsap.to(obj, {
-        val: target,
-        duration: 1.8,
-        delay: 1.8 + i * 0.2,
-        ease: 'power2.out',
-        onUpdate: () => {
-          setAnimatedStats(prev => {
-            const next = [...prev];
-            next[i] = Math.round(obj.val);
-            return next;
-          });
-        }
-      });
-    });
+
   }, []);
 
-  // ── 3. Workspace card hover (scale + glow) ──────────────────────
   useEffect(() => {
     const cards = document.querySelectorAll('.workspace-card');
     cards.forEach((card) => {
@@ -111,7 +243,6 @@ const WorkspaceSelectionPage = () => {
     });
   }, []);
 
-  // ── 4. Create modal open/close ──────────────────────────────────
   useEffect(() => {
     if (showCreateModal && createModalRef.current) {
       gsap.fromTo(overlayRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3 });
@@ -122,7 +253,6 @@ const WorkspaceSelectionPage = () => {
     }
   }, [showCreateModal]);
 
-  // ── 5. Join modal open ──────────────────────────────────────────
   useEffect(() => {
     if (showJoinModal && joinModalRef.current) {
       gsap.fromTo(joinModalRef.current,
@@ -132,14 +262,12 @@ const WorkspaceSelectionPage = () => {
     }
   }, [showJoinModal]);
 
-  // ── 6. Step 2 (invite) slide transition ────────────────────────
   useEffect(() => {
     if (createdWorkspace && stepRef.current) {
       gsap.fromTo(stepRef.current,
         { opacity: 0, y: 30, scale: 0.97 },
         { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: 'power3.out' }
       );
-      // Success badge bounce
       gsap.fromTo('.success-badge',
         { scale: 0, opacity: 0 },
         { scale: 1, opacity: 1, duration: 0.5, ease: 'back.out(2)', delay: 0.15 }
@@ -147,7 +275,6 @@ const WorkspaceSelectionPage = () => {
     }
   }, [createdWorkspace]);
 
-  // ── Modal close animation helper ────────────────────────────────
   const closeWithAnimation = (ref, cb) => {
     gsap.to(ref.current, {
       y: 60, opacity: 0, scale: 0.93, duration: 0.28, ease: 'power2.in',
@@ -156,14 +283,13 @@ const WorkspaceSelectionPage = () => {
     if (overlayRef.current) gsap.to(overlayRef.current, { opacity: 0, duration: 0.25 });
   };
 
-  // ── Button ripple ───────────────────────────────────────────────
   const addRipple = (e) => {
     const btn = e.currentTarget;
     const ripple = document.createElement('span');
     ripple.className = 'absolute rounded-full bg-white/20 pointer-events-none';
     const size = Math.max(btn.offsetWidth, btn.offsetHeight) * 1.5;
     const rect = btn.getBoundingClientRect();
-    ripple.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX-rect.left-size/2}px;top:${e.clientY-rect.top-size/2}px;`;
+    ripple.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX - rect.left - size / 2}px;top:${e.clientY - rect.top - size / 2}px;`;
     btn.style.position = 'relative';
     btn.style.overflow = 'hidden';
     btn.appendChild(ripple);
@@ -173,11 +299,11 @@ const WorkspaceSelectionPage = () => {
   // ── Handlers ────────────────────────────────────────────────────
   const handleCreateWorkspace = (e) => {
     e.preventDefault();
-    // Button press animation
     gsap.to(e.submitter || e.target, { scale: 0.96, duration: 0.1, yoyo: true, repeat: 1 });
-    const inviteId = generateInviteId();
-    const inviteLink = generateInviteLink(inviteId);
-    setCreatedWorkspace({ ...newWorkspace, inviteId, inviteLink });
+    // Generate invite using shared context (use workspace id 5 for newly created)
+    const newWsId = workspaces.length + 1;
+    const { code, link } = createInvite(newWsId);
+    setCreatedWorkspace({ ...newWorkspace, inviteId: code, inviteLink: link });
   };
 
   const handleFinishCreate = () => {
@@ -219,15 +345,28 @@ const WorkspaceSelectionPage = () => {
   const handleJoinWorkspace = (e) => {
     e.preventDefault();
     const val = joinValue.trim();
-    if (!val) { setJoinError('Please enter a workspace ID or invite link.'); gsap.fromTo('.join-input', { x: 0 }, { x: 8, duration: 0.07, repeat: 5, yoyo: true, ease: 'power2.inOut' }); return; }
+    if (!val) {
+      setJoinError('Please enter a workspace ID or invite link.');
+      gsap.fromTo('.join-input', { x: 0 }, { x: 8, duration: 0.07, repeat: 5, yoyo: true, ease: 'power2.inOut' });
+      return;
+    }
     const isLink = val.startsWith('http');
     const isId = /^[A-Z0-9]{8}$/i.test(val);
-    if (!isLink && !isId) { setJoinError('Invalid format. Enter a valid ID (e.g. AB12CD34) or full invite link.'); gsap.fromTo('.join-input', { x: 0 }, { x: 8, duration: 0.07, repeat: 5, yoyo: true, ease: 'power2.inOut' }); return; }
+    if (!isLink && !isId) {
+      setJoinError('Invalid format. Enter a valid ID (e.g. AB12CD34) or full invite link.');
+      gsap.fromTo('.join-input', { x: 0 }, { x: 8, duration: 0.07, repeat: 5, yoyo: true, ease: 'power2.inOut' });
+      return;
+    }
+
+    // Resolve invite code via shared context
+    const wsId = resolveInvite(val);
+    const targetWsId = wsId || 1; // Default to workspace 1 if code not found
+
     closeWithAnimation(joinModalRef, () => {
       setShowJoinModal(false);
       setJoinValue('');
       setJoinError('');
-      navigate('/dashboard/1');
+      navigate(`/dashboard/${targetWsId}`);
     });
   };
 
@@ -239,41 +378,122 @@ const WorkspaceSelectionPage = () => {
     });
   };
 
-  const statLabels = ['Total Workspaces', 'Total Members', 'Total Channels'];
+  const handleSignOut = () => {
+    logout();
+    navigate('/login');
+  };
+
+
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-[#222831] text-slate-900 dark:text-[#EEEEEE] transition-colors duration-500 font-sans overflow-hidden">
+      <GlassFilter />
 
-      <div className="relative min-h-screen flex flex-col z-10">
+      {/* ── Liquid Glass Navbar ─────────────────────────────────────── */}
+      <div className="ws-lg-navbar">
+        <div className="ws-glass-wrapper">
+          <div className="ws-glass-blur" /><div className="ws-glass-white" /><div className="ws-glass-shine" />
+          <div className="ws-glass-content" style={{ display: "flex", alignItems: "center", width: "100%" }}>
+            {/* Logo */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: 28, flexShrink: 0 }}>
+              <Logo size={26} id="ws-nav-logo" />
+              <span style={{ fontFamily: "var(--fd)", fontSize: 19, color: "var(--t1)" }}>SyncUp</span>
+            </div>
 
-        {/* ── Header ──────────────────────────────────────────────── */}
-        <header ref={headerRef} className="py-5 px-6 bg-white/90 dark:bg-[#31363F]/85 backdrop-blur-xl border-b border-slate-200/50 dark:border-[#76ABAE]/20 transition-colors duration-500">
-          <div className="max-w-6xl mx-auto flex items-center justify-between">
-            <button onClick={() => navigate('/')} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-              <div className="header-logo w-10 h-10 bg-blue-600 dark:bg-[#76ABAE] rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30 dark:shadow-[#76ABAE]/20">
-                <Zap className="w-5 h-5 text-white dark:text-[#222831]" />
-              </div>
-              <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-[#EEEEEE]">
-                SyncUp <span className="text-blue-600 dark:text-[#76ABAE]">Workspace</span>
-              </span>
-            </button>
-            <div className="flex items-center gap-3">
-              <div className="hidden sm:flex items-center gap-3">
-                <div className="w-9 h-9 bg-blue-600 dark:bg-[#76ABAE] rounded-full flex items-center justify-center text-white dark:text-[#222831] font-bold text-sm">JD</div>
-                <div className="text-right">
-                  <div className="text-sm font-semibold text-slate-900 dark:text-[#EEEEEE]">John Doe</div>
-                  <div className="text-xs text-slate-500 dark:text-[#EEEEEE]/50">john@company.com</div>
+            {/* Nav Links */}
+            <div style={{ display: "flex", gap: 24, flex: 1 }}>
+              <button className="ws-nav-link" onClick={() => navigate('/')}>Home</button>
+              <button className="ws-nav-link" onClick={() => navigate('/workspaces')} style={{ color: 'var(--accent)' }}>Workspaces</button>
+            </div>
+
+            {/* Profile Section */}
+            <div style={{ display: "flex", alignItems: "center", marginLeft: 8, flexShrink: 0, position: 'relative' }} ref={profileDropdownRef}>
+              <button
+                onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '4px 8px',
+                  borderRadius: 12,
+                  transition: 'background 0.2s',
+                }}
+                className="hover:bg-black/5 dark:hover:bg-white/5"
+              >
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-lg">
+                  {userAvatar}
                 </div>
-              </div>
-              <button onClick={() => navigate('/login')} className="px-4 py-2 text-sm font-medium text-slate-600 dark:text-[#EEEEEE]/70 hover:bg-slate-100 dark:hover:bg-[#222831]/60 rounded-xl border border-transparent hover:border-slate-200 dark:hover:border-[#76ABAE]/30 transition-all duration-300">
-                Sign Out
+                <ChevronDown style={{ width: 14, height: 14, color: 'var(--t2)', transition: 'transform 0.2s', transform: showProfileDropdown ? 'rotate(180deg)' : 'rotate(0)' }} />
               </button>
+
+              {/* Profile Dropdown */}
+              {showProfileDropdown && (
+                <div 
+                  className="ws-profile-dropdown animate-in fade-in slide-in-from-top-2 duration-200" 
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 12px)',
+                    right: 0,
+                    width: '260px',
+                    background: 'var(--card)', // glassmorphism translucent background
+                    backdropFilter: 'blur(16px)',
+                    WebkitBackdropFilter: 'blur(16px)',
+                    borderRadius: '16px',
+                    boxShadow: 'var(--shadow-card)',
+                    border: '1px solid var(--border)',
+                    overflow: 'hidden',
+                    zIndex: 100
+                  }}
+                >
+                  {/* User Info */}
+                  <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--border)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg">
+                        {userAvatar}
+                      </div>
+                      <div>
+                        <div style={{ fontFamily: 'var(--fb)', fontWeight: 600, fontSize: 14, color: 'var(--t1)' }}>{userName}</div>
+                        <div style={{ fontSize: 12, color: 'var(--t3)' }}>{userEmail}</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ padding: '6px' }}>
+                    <button
+                      onClick={handleSignOut}
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        padding: '10px 12px',
+                        border: 'none',
+                        background: 'transparent',
+                        borderRadius: 10,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                        fontFamily: 'var(--fb)',
+                        fontSize: 13,
+                        fontWeight: 600,
+                      }}
+                      className="text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-500/10 active:scale-[0.98]"
+                    >
+                      <LogOut style={{ width: 16, height: 16 }} />
+                      Sign Out
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        </header>
+        </div>
+      </div>
 
+      <div className="relative min-h-screen flex flex-col z-10">
         {/* ── Main ────────────────────────────────────────────────── */}
-        <main ref={mainRef} className="flex-1 flex items-center justify-center px-6 py-12">
+        <main ref={mainRef} className="flex-1 flex items-center justify-center px-6 py-12" style={{ paddingTop: '100px' }}>
           <div className="w-full max-w-6xl">
 
             {/* Title */}
@@ -349,15 +569,7 @@ const WorkspaceSelectionPage = () => {
               </button>
             </div>
 
-            {/* Stats */}
-            <div ref={statsRef} className="grid grid-cols-3 gap-4 max-w-2xl mx-auto">
-              {statLabels.map((label, i) => (
-                <div key={i} className="stat-card bg-white/90 dark:bg-[#31363F]/85 backdrop-blur-xl rounded-[1.25rem] p-4 border border-slate-200/50 dark:border-[#76ABAE]/20 text-center transition-colors duration-500">
-                  <div className="text-2xl font-bold text-blue-600 dark:text-[#76ABAE]">{animatedStats[i]}</div>
-                  <div className="text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-[#EEEEEE]/50 mt-1">{label}</div>
-                </div>
-              ))}
-            </div>
+
 
           </div>
         </main>
@@ -402,7 +614,7 @@ const WorkspaceSelectionPage = () => {
                 <div className="space-y-2">
                   <label className="text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-[#EEEEEE]/70 ml-1">Choose an Icon</label>
                   <div className="grid grid-cols-6 gap-2">
-                    {['🏢','🚀','💼','🎨','⚙️','🔬','📚','🎯','💡','🌟','🔥','⚡'].map((emoji) => (
+                    {['🏢', '🚀', '💼', '🎨', '⚙️', '🔬', '📚', '🎯', '💡', '🌟', '🔥', '⚡'].map((emoji) => (
                       <button
                         key={emoji}
                         type="button"
@@ -419,38 +631,6 @@ const WorkspaceSelectionPage = () => {
                         {emoji}
                       </button>
                     ))}
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-[#EEEEEE]/70 ml-1">
-                    Invite by Code <span className="normal-case font-normal text-slate-400 dark:text-[#EEEEEE]/30">(generated on create)</span>
-                  </label>
-                  <div className="flex gap-2">
-                    <div className="flex-1 bg-slate-50 dark:bg-[#222831]/80 border border-slate-200 dark:border-[#76ABAE]/20 px-4 py-3 rounded-xl flex items-center gap-2">
-                      <Hash className="w-4 h-4 text-slate-400 dark:text-[#EEEEEE]/30 flex-shrink-0" />
-                      <span className="text-sm font-mono font-bold tracking-widest text-slate-400 dark:text-[#EEEEEE]/30">XXXXXXXX</span>
-                    </div>
-                    <div className="px-4 py-3 rounded-xl text-sm font-bold bg-slate-100 dark:bg-[#222831]/60 text-slate-400 dark:text-[#EEEEEE]/30 border border-slate-200 dark:border-[#76ABAE]/10 cursor-not-allowed flex items-center gap-2 select-none">
-                      <Copy className="w-4 h-4" /> Copy
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-[#EEEEEE]/70 ml-1">
-                    Invite by Link <span className="normal-case font-normal text-slate-400 dark:text-[#EEEEEE]/30">(generated on create)</span>
-                  </label>
-                  <div className="flex gap-2">
-                    <div className="flex-1 bg-slate-50 dark:bg-[#222831]/80 border border-slate-200 dark:border-[#76ABAE]/20 px-4 py-3 rounded-xl flex items-center gap-2 overflow-hidden">
-                      <Link className="w-4 h-4 text-slate-400 dark:text-[#EEEEEE]/30 flex-shrink-0" />
-                      <span className="text-xs font-mono text-slate-400 dark:text-[#EEEEEE]/30 truncate">
-                        {newWorkspace.name ? `syncup.io/join/${newWorkspace.name.toLowerCase().replace(/\s+/g,'-')}-xxxx` : 'syncup.io/join/your-workspace-xxxx'}
-                      </span>
-                    </div>
-                    <div className="px-4 py-3 rounded-xl text-sm font-bold bg-slate-100 dark:bg-[#222831]/60 text-slate-400 dark:text-[#EEEEEE]/30 border border-slate-200 dark:border-[#76ABAE]/10 cursor-not-allowed flex items-center gap-2 select-none">
-                      <Copy className="w-4 h-4" /> Copy
-                    </div>
                   </div>
                 </div>
 

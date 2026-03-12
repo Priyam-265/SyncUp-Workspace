@@ -4,52 +4,9 @@ import { motion, useTransform, useSpring, useMotionValue } from "framer-motion";
 import * as THREE from "three";
 
 const GLOBAL_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap');
-
-:root {
-  --bg: #F0F2F5;
-  --surface: #FFFFFF;
-  --card: rgba(255,255,255,0.90);
-  --card-h: rgba(255,255,255,0.97);
-  --border: rgba(118,171,174,0.18);
-  --border-l: rgba(118,171,174,0.40);
-  --accent: #76ABAE;
-  --accent2: #9ECDD0;
-  --glow: rgba(118,171,174,0.28);
-  --t1: #1A2025;
-  --t2: rgba(26,32,37,0.60);
-  --t3: rgba(26,32,37,0.35);
-  --fd: 'Instrument Serif', Georgia, serif;
-  --fb: 'Syne', sans-serif;
-  --r: 18px;
-  --shadow-card: 0 2px 16px rgba(118,171,174,0.10), 0 1px 4px rgba(0,0,0,0.06);
-  --hero-bg: #E8EDF2;
-}
-
-.dark {
-  --bg: #222831;
-  --surface: #31363F;
-  --card: rgba(49,54,63,0.85);
-  --card-h: rgba(49,54,63,0.95);
-  --border: rgba(118,171,174,0.20);
-  --border-l: rgba(118,171,174,0.38);
-  --accent: #76ABAE;
-  --accent2: #9ECDD0;
-  --glow: rgba(118,171,174,0.28);
-  --t1: #EEEEEE;
-  --t2: rgba(238,238,238,0.60);
-  --t3: rgba(238,238,238,0.32);
-  --shadow-card: 0 2px 24px rgba(0,0,0,0.35);
-  --hero-bg: #1C2026;
-}
-
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
-body { background: var(--bg); color: var(--t1); font-family: var(--fb); overflow-x: hidden; cursor: none; transition: background 0.3s, color 0.3s; }
 body::after { content: ''; position: fixed; inset: 0; background: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.04'/%3E%3C/svg%3E"); pointer-events: none; z-index: 9998; opacity: .08; mix-blend-mode: multiply; }
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: var(--bg); }
-::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 99px; }
 
 #su-cursor { width: 10px; height: 10px; background: var(--accent); border-radius: 50%; position: fixed; top: 0; left: 0; pointer-events: none; z-index: 99999; transform: translate(-50%,-50%); transition: width .2s, height .2s; mix-blend-mode: multiply; }
 .dark #su-cursor { mix-blend-mode: difference; }
@@ -244,7 +201,9 @@ function SplineScene3D() {
         if (!canvas || !container) return;
         const ctx = canvas.getContext('2d');
         const resize = () => { canvas.width = container.clientWidth; canvas.height = container.clientHeight; };
-        resize(); window.addEventListener('resize', resize, { passive: true });
+        resize(); 
+        setTimeout(resize, 100); // Force resize after mount to ensure dimensions
+        window.addEventListener('resize', resize, { passive: true });
         const onMouseMove = (e) => { const r = container.getBoundingClientRect(); mouseRef.current = { x: ((e.clientX - r.left) / r.width - 0.5) * 2, y: -((e.clientY - r.top) / r.height - 0.5) * 2, active: true }; };
         const onMouseLeave = () => { mouseRef.current = { x: 0, y: 0, active: false }; };
         container.addEventListener('mousemove', onMouseMove);
