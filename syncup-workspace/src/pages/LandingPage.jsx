@@ -1,1177 +1,729 @@
-import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import gsap from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import {
-  MessageSquare, Users, Shield, FolderOpen, Zap, Activity,
-  ArrowRight, Check, Github, Mail, Linkedin, Sun, Moon,
-  Hash, Bell, Search, Send, Paperclip, Smile, MoreHorizontal,
-} from 'lucide-react';
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { Link } from "react-router-dom";
+import { motion, useTransform, useSpring, useMotionValue } from "framer-motion";
+import * as THREE from "three";
 
-gsap.registerPlugin(ScrollTrigger);
-
-/* ─────────────────────────────────────────────
-   DESIGN TOKENS + GLOBAL CSS
-───────────────────────────────────────────── */
 const GLOBAL_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap');
-@import url('https://api.fontshare.com/v2/css?f[]=clash-display@400,500,600,700&f[]=satoshi@400,500,700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap');
 
-/* ── Dark (default) ── */
 :root {
-  --bg-page    : #222831;
-  --bg-surface : #1C2029;
-  --bg-card    : rgba(49,54,63,0.85);
-  --bg-card-hov: rgba(56,62,72,0.92);
-  --border     : rgba(118,171,174,0.18);
-  --border-lit : rgba(118,171,174,0.45);
-  --accent     : #76ABAE;
-  --accent-dim : rgba(118,171,174,0.13);
-  --accent-glow: rgba(118,171,174,0.28);
-  --teal-hi    : #A8D8DA;
-  --text-1     : #EEEEEE;
-  --text-2     : rgba(238,238,238,0.65);
-  --text-3     : rgba(238,238,238,0.32);
-  --loader-bg  : #1A1D23;
-
-  /* Liquid glass navbar */
-  --nav-bg     : rgba(34,40,49,0.55);
-  --nav-border : rgba(118,171,174,0.25);
-  --nav-spec   : rgba(255,255,255,0.06);
-
-  --r          : 18px;
-  --font-d     : 'ClashDisplay', 'Syne', -apple-system, sans-serif;
-  --font-b     : 'Satoshi',      'DM Sans', -apple-system, sans-serif;
+  --bg: #F0F2F5;
+  --surface: #FFFFFF;
+  --card: rgba(255,255,255,0.90);
+  --card-h: rgba(255,255,255,0.97);
+  --border: rgba(118,171,174,0.18);
+  --border-l: rgba(118,171,174,0.40);
+  --accent: #76ABAE;
+  --accent2: #9ECDD0;
+  --glow: rgba(118,171,174,0.28);
+  --t1: #1A2025;
+  --t2: rgba(26,32,37,0.60);
+  --t3: rgba(26,32,37,0.35);
+  --fd: 'Instrument Serif', Georgia, serif;
+  --fb: 'Syne', sans-serif;
+  --r: 18px;
+  --shadow-card: 0 2px 16px rgba(118,171,174,0.10), 0 1px 4px rgba(0,0,0,0.06);
+  --hero-bg: #E8EDF2;
 }
 
-/* ── Light mode ── */
-.light-mode {
-  --bg-page    : #F0F2F5;
-  --bg-surface : #E8EBF0;
-  --bg-card    : rgba(255,255,255,0.90);
-  --bg-card-hov: rgba(255,255,255,0.98);
-  --border     : rgba(74,139,142,0.14);
-  --border-lit : rgba(74,139,142,0.42);
-  --accent     : #4A8B8E;
-  --accent-dim : rgba(74,139,142,0.1);
-  --accent-glow: rgba(74,139,142,0.22);
-  --teal-hi    : #2D7D80;
-  --text-1     : #1A1A2E;
-  --text-2     : rgba(26,26,46,0.62);
-  --text-3     : rgba(26,26,46,0.34);
-  --loader-bg  : #F0F2F5;
-
-  --nav-bg     : rgba(240,242,245,0.58);
-  --nav-border : rgba(74,139,142,0.22);
-  --nav-spec   : rgba(255,255,255,0.55);
+.dark {
+  --bg: #222831;
+  --surface: #31363F;
+  --card: rgba(49,54,63,0.85);
+  --card-h: rgba(49,54,63,0.95);
+  --border: rgba(118,171,174,0.20);
+  --border-l: rgba(118,171,174,0.38);
+  --accent: #76ABAE;
+  --accent2: #9ECDD0;
+  --glow: rgba(118,171,174,0.28);
+  --t1: #EEEEEE;
+  --t2: rgba(238,238,238,0.60);
+  --t3: rgba(238,238,238,0.32);
+  --shadow-card: 0 2px 24px rgba(0,0,0,0.35);
+  --hero-bg: #1C2026;
 }
 
-/* ── Reset ── */
-*,*::before,*::after { box-sizing:border-box; margin:0; padding:0; }
-html { scroll-behavior:smooth; -webkit-font-smoothing:antialiased; }
-body {
-  background : var(--bg-page);
-  color      : var(--text-1);
-  font-family: var(--font-b);
-  font-size  : 16px;
-  font-weight: 400;
-  letter-spacing: -0.01em;
-  line-height: 1.6;
-  overflow-x : hidden;
-  display    : flex;
-  flex-direction: column;
-  transition : background .55s ease, color .55s ease;
-}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; -webkit-font-smoothing: antialiased; }
+body { background: var(--bg); color: var(--t1); font-family: var(--fb); overflow-x: hidden; cursor: none; transition: background 0.3s, color 0.3s; }
+body::after { content: ''; position: fixed; inset: 0; background: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.04'/%3E%3C/svg%3E"); pointer-events: none; z-index: 9998; opacity: .08; mix-blend-mode: multiply; }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 99px; }
 
-/* ── Premium heading typography — Clash Display / Syne ── */
-h1, h2, h3, h4 {
-  font-family   : var(--font-d);
-  font-weight   : 700;
-  letter-spacing: -0.04em;
-  line-height   : 1.08;
-  color         : var(--text-1);
-}
-main {
-  display      : block;
-  width        : 100%;
-  position     : relative;
-  padding-top  : 1px;
-  margin-top   : -1px;
-  overflow     : hidden;
-}
+#su-cursor { width: 10px; height: 10px; background: var(--accent); border-radius: 50%; position: fixed; top: 0; left: 0; pointer-events: none; z-index: 99999; transform: translate(-50%,-50%); transition: width .2s, height .2s; mix-blend-mode: multiply; }
+.dark #su-cursor { mix-blend-mode: difference; }
+#su-cursor.big { width: 42px; height: 42px; background: rgba(118,171,174,0.15); border: 1px solid var(--accent); mix-blend-mode: normal; }
+#su-prog { position: fixed; top: 0; left: 0; height: 2px; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent2)); z-index: 10001; pointer-events: none; box-shadow: 0 0 10px var(--glow); transition: width .06s linear; }
 
-/* Grain overlay */
-body::after {
-  content          : '';
-  position         : fixed;
-  inset            : 0;
-  background       : url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.04'/%3E%3C/svg%3E");
-  pointer-events   : none;
-  z-index          : 9998;
-  opacity          : .28;
-  mix-blend-mode   : overlay;
-}
+#theme-toggle { position: fixed; bottom: 24px; right: 24px; z-index: 10002; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border-l); background: var(--card); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-card); transition: background .25s, border-color .25s, transform .2s; }
+#theme-toggle:hover { transform: scale(1.1); background: var(--card-h); }
 
-/* ── Scroll progress ── */
-#su-progress {
-  position : fixed;
-  top:0; left:0;
-  height   : 2px;
-  width    : 0%;
-  background: linear-gradient(90deg, var(--accent), var(--teal-hi));
-  z-index  : 10001;
-  pointer-events: none;
-  box-shadow: 0 0 8px var(--accent-glow);
-  transition: width .08s linear;
-}
+.hero-section { position: relative; height: 100vh; overflow: hidden; display: flex; align-items: center; justify-content: center; background: var(--hero-bg); }
+.hero-grid-overlay { position: absolute; inset: 0; background-image: linear-gradient(rgba(118,171,174,0.07) 1px, transparent 1px), linear-gradient(90deg, rgba(118,171,174,0.07) 1px, transparent 1px); background-size: 48px 48px; pointer-events: none; z-index: 1; }
 
-/* ── Loader ── */
-#su-loader {
-  position        : fixed;
-  inset           : 0;
-  z-index         : 9999;
-  background      : var(--loader-bg);
-  display         : flex;
-  flex-direction  : column;
-  align-items     : center;
-  justify-content : center;
-  gap             : 20px;
-}
-.l-mark {
-  font-family   : var(--font-d);
-  font-size     : 36px;
-  font-weight   : 700;
-  letter-spacing: -0.03em;
-  color         : var(--text-1);
-  opacity       : 0;
-  transform     : translateY(20px);
-}
-.l-sub {
-  font-family   : var(--font-b);
-  font-size     : 10px;
-  font-weight   : 500;
-  letter-spacing: .32em;
-  text-transform: uppercase;
-  color         : var(--text-3);
-  opacity       : 0;
-}
-.l-track { width:180px; height:1px; background:var(--border); overflow:hidden; margin-top:6px; }
-.l-fill  { height:100%; width:0; background:linear-gradient(90deg,var(--accent),var(--teal-hi)); }
+.lg-navbar { position: fixed; top: 18px; left: 50%; transform: translateX(-50%) translateY(-110px); opacity: 0; visibility: hidden; z-index: 10000; transition: none; }
+.lg-navbar.visible { visibility: visible; transition: transform .6s cubic-bezier(.22,1,.36,1), opacity .5s; }
+.lg-navbar.compact { top: 10px; }
+.glass-effect-wrapper { position: relative; display: flex; font-family: var(--fb); font-weight: 600; overflow: hidden; cursor: pointer; transition: all 700ms cubic-bezier(0.175, 0.885, 0.32, 2.2); box-shadow: 0 6px 24px rgba(0,0,0,0.08), 0 0 0 1px rgba(118,171,174,0.14); }
+.glass-blur-layer { position: absolute; inset: 0; z-index: 0; overflow: hidden; border-radius: inherit; backdrop-filter: blur(20px) saturate(160%); -webkit-backdrop-filter: blur(20px) saturate(160%); filter: url(#glass-distortion); isolation: isolate; }
+.glass-white-layer { position: absolute; inset: 0; z-index: 1; border-radius: inherit; background: rgba(255,255,255,0.72); }
+.dark .glass-white-layer { background: rgba(49,54,63,0.78); }
+.glass-shine-layer { position: absolute; inset: 0; z-index: 2; overflow: hidden; border-radius: inherit; box-shadow: inset 2px 2px 1px 0 rgba(255,255,255,0.55), inset -1px -1px 1px 1px rgba(255,255,255,0.18); }
+.glass-content { position: relative; z-index: 3; }
+.lg-navbar-pill { border-radius: 9999px; padding: 8px 16px 8px 12px; min-width: 500px; align-items: center; }
+.lg-navbar-pill:hover { padding: 10px 18px 10px 14px; }
 
-/* ─────────────────────────────────────────────
-   iOS LIQUID GLASS NAVBAR
-   • bg: rgba(49,54,63,0.40) dark translucent slate
-   • blur: blur(20px) saturate(180%) — vibrancy
-   • border: 1px rgba(255,255,255,0.08) — hair-thin glass edge
-   • shape: floating pill, 90% wide, 100px radius
-   • GSAP entrance: slides from y:-100, fades in expo.out
-   • scroll: scale(0.98) + bg opacity bumps to 0.80
-───────────────────────────────────────────── */
-.navbar-pill {
-  position : fixed;
-  top      : 20px;
-  left     : 50%;
-  transform: translateX(-50%) translateY(-100px);   /* GSAP start state */
-  opacity  : 0;                                      /* GSAP start state */
-  z-index  : 10000;
+.btn { position: relative; overflow: hidden; cursor: pointer; display: inline-flex; font-family: var(--fb); font-weight: 600; border: none; transition: transform .15s, box-shadow .25s; display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { transform: translateY(-1px); }
+.btn-p { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; padding: 8px 18px; border-radius: 99px; font-size: 13px; }
+.btn-p:hover { box-shadow: 0 0 28px var(--glow); }
+.btn-s { background: rgba(118,171,174,0.08); color: var(--t1); border: 1px solid var(--border-l); padding: 8px 18px; border-radius: 99px; font-size: 13px; }
+.btn-s:hover { background: rgba(118,171,174,0.15); border-color: var(--accent); }
+.ripple { position: absolute; border-radius: 50%; background: rgba(255,255,255,0.28); transform: scale(0); animation: rpl .7s ease-out forwards; pointer-events: none; }
+@keyframes rpl { to { transform: scale(5); opacity: 0; } }
 
-  width         : 90%;
-  max-width     : 1200px;
-  height        : 64px;
-  padding       : 0 24px;
+.section { padding: 110px 24px; position: relative; }
+.container { max-width: 1160px; margin: 0 auto; padding: 0 24px; }
+.section-label { font-family: var(--fb); font-size: 10px; font-weight: 700; letter-spacing: .3em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; display: block; }
+.section-h { font-family: var(--fd); font-size: clamp(2.2rem, 5vw, 3.8rem); font-weight: 400; letter-spacing: -0.025em; line-height: 1.05; color: var(--t1); margin-bottom: 20px; }
+.section-h em { font-style: italic; color: var(--accent); }
 
-  /* Liquid glass */
-  background          : rgba(49, 54, 63, 0.40);
-  backdrop-filter     : blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+.glass { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: var(--shadow-card); transition: background .3s, border-color .3s, box-shadow .3s, transform .25s; }
+.glass:hover { background: var(--card-h); border-color: var(--border-l); box-shadow: 0 0 40px rgba(118,171,174,0.10), 0 16px 40px rgba(0,0,0,.07); }
 
-  /* Perfect pill */
-  border-radius : 100px;
-  border        : 1px solid rgba(255, 255, 255, 0.08);
+.stats-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 18px; margin-top: 52px; }
+.stat-card { padding: 36px 24px; border-radius: 18px; text-align: center; }
+.stat-val { font-family: var(--fd); font-size: clamp(2.4rem,5vw,3.8rem); color: var(--accent); line-height: 1; margin-bottom: 8px; letter-spacing: 0.02em; }
+.stat-lbl { font-size: 13px; color: var(--t2); font-weight: 500; }
 
-  /* Specular top-edge glow */
-  box-shadow:
-    inset 0  1px 0 rgba(255,255,255,0.10),
-    inset 0 -1px 0 rgba(0,0,0,0.06),
-    0 8px 32px rgba(0,0,0,0.20),
-    0 2px  8px rgba(0,0,0,0.10);
+.marquee-section { padding: 80px 0; border-top: 1px solid var(--border); overflow: hidden; }
+.marquee-row { overflow: hidden; padding: 8px 0; }
+.marquee-inner { display: flex; gap: 16px; animation: marqL 36s linear infinite; width: max-content; }
+.marquee-inner.rev { animation: marqR 40s linear infinite; }
+.marquee-row:hover .marquee-inner { animation-play-state: paused; }
+@keyframes marqL { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes marqR { from { transform: translateX(-50%); } to { transform: translateX(0); } }
+.tcard { width: 280px; flex-shrink: 0; padding: 22px; border-radius: 16px; }
+.tcard p { font-size: 13.5px; color: var(--t2); line-height: 1.68; margin: 12px 0 16px; }
+.tcard-author { display: flex; align-items: center; gap: 10px; }
+.tcard-av { width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(135deg, var(--accent), var(--accent2)); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; flex-shrink: 0; }
+.tcard-name { font-size: 13px; font-weight: 600; color: var(--t1); }
+.tcard-role { font-size: 11px; color: var(--t3); }
 
-  display        : flex;
-  align-items    : center;
-  justify-content: space-between;
+.pricing-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 20px; margin-top: 56px; align-items: start; }
+.pricing-card { padding: 34px; border-radius: 22px; }
+.pricing-card.featured { border-color: var(--accent); box-shadow: 0 0 48px rgba(118,171,174,0.14), 0 8px 32px rgba(0,0,0,.07); transform: scale(1.04); }
+.pricing-badge { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: linear-gradient(90deg, var(--accent), var(--accent2)); color: #fff; font-size: 9px; font-weight: 800; letter-spacing: .15em; padding: 4px 14px; border-radius: 99px; white-space: nowrap; }
+.pricing-tier { font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
+.pricing-price { font-family: var(--fd); font-size: 44px; font-weight: 400; color: var(--t1); line-height: 1; letter-spacing: -0.02em; }
+.pricing-period { font-size: 13px; color: var(--t3); margin-left: 6px; }
+.pricing-desc { font-size: 14px; color: var(--t2); margin: 12px 0 24px; line-height: 1.6; }
+.pricing-features { display: flex; flex-direction: column; gap: 11px; margin-bottom: 28px; }
+.feat-row { display: flex; align-items: center; gap: 10px; }
+.check-box { width: 18px; height: 18px; border-radius: 5px; background: rgba(118,171,174,0.10); border: 1px solid var(--border-l); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.feat-row span { font-size: 13.5px; color: var(--t2); }
 
-  /* Smooth scroll-morph — height + padding animate with width */
-  transition: width   .55s cubic-bezier(.22,1,.36,1),
-              height  .55s cubic-bezier(.22,1,.36,1),
-              padding .55s cubic-bezier(.22,1,.36,1),
-              background .35s ease,
-              box-shadow .35s ease,
-              top .45s cubic-bezier(.22,1,.36,1),
-              transform .45s cubic-bezier(.22,1,.36,1);
+.blob { position: absolute; border-radius: 50%; filter: blur(110px); pointer-events: none; }
+.s-reveal { opacity: 0; transform: translateY(44px); transition: opacity .8s cubic-bezier(.22,1,.36,1), transform .8s cubic-bezier(.22,1,.36,1); }
+.s-reveal.in { opacity: 1; transform: translateY(0); }
+.card-reveal { opacity: 0; transform: translateY(50px) scale(0.96); transition: opacity .7s cubic-bezier(.22,1,.36,1), transform .7s cubic-bezier(.22,1,.36,1); }
+.card-reveal.in { opacity: 1; transform: translateY(0) scale(1); }
+.scale-reveal { opacity: 0; transform: scale(0.9); transition: opacity .7s, transform .7s; }
+.scale-reveal.in { opacity: 1; transform: scale(1); }
 
-  will-change: transform, opacity, background;
-}
-/* Light mode glass */
-.light-mode .navbar-pill {
-  background: rgba(240, 242, 245, 0.50);
-  border-color: rgba(74,139,142,0.14);
-  box-shadow:
-    inset 0  1px 0 rgba(255,255,255,0.65),
-    inset 0 -1px 0 rgba(0,0,0,0.03),
-    0 8px 32px rgba(0,0,0,0.08);
-}
-/* Scroll-compact: shrinks height, width, lifts higher, deepens glass */
-.navbar-pill.compact {
-  width     : 78%;
-  height    : 50px;
-  top       : 8px;
-  padding   : 0 20px;
-  background: rgba(34, 40, 49, 0.82);
-  box-shadow:
-    inset 0  1px 0 rgba(255,255,255,0.10),
-    inset 0 -1px 0 rgba(0,0,0,0.14),
-    0 20px 60px rgba(0,0,0,0.35),
-    0  4px 16px rgba(0,0,0,0.20),
-    0  0  0  1px rgba(118,171,174,0.12);
-  transform : translateX(-50%) scale(0.97);
-}
-.light-mode .navbar-pill.compact {
-  background: rgba(240, 242, 245, 0.90);
-  box-shadow:
-    inset 0  1px 0 rgba(255,255,255,0.80),
-    0 12px 40px rgba(0,0,0,0.10);
-}
-/* Prismatic inner edge shimmer */
-.navbar-pill::before {
-  content      : '';
-  position     : absolute;
-  inset        : 0;
-  border-radius: inherit;
-  background   : linear-gradient(108deg,
-    rgba(255,255,255,.07) 0%,
-    rgba(118,171,174,.05) 35%,
-    transparent 60%,
-    rgba(118,171,174,.04) 100%);
-  pointer-events: none;
-  z-index      : 0;
-}
-/* All direct children sit above pseudo */
-.navbar-pill > * { position:relative; z-index:1; }
+.feat-card { padding: 30px; border-radius: 18px; }
+.feat-icon { width: 48px; height: 48px; border-radius: 13px; background: rgba(118,171,174,0.10); border: 1px solid var(--border-l); display: flex; align-items: center; justify-content: center; margin-bottom: 18px; }
+.feat-card h3 { font-family: var(--fd); font-size: 20px; font-weight: 400; color: var(--t1); margin-bottom: 10px; }
+.feat-card p { font-size: 13.5px; color: var(--t2); line-height: 1.7; }
+.feat-card-float { transition: box-shadow .3s, border-color .3s; will-change: transform; }
+.feat-card-float:hover { border-color: var(--border-l); box-shadow: 0 0 40px rgba(118,171,174,0.10), 0 16px 48px rgba(0,0,0,0.07); }
+.feat-icon-glow { transition: background .3s, box-shadow .3s; }
+.feat-card-float:hover .feat-icon-glow { background: rgba(118,171,174,0.18); box-shadow: 0 0 20px rgba(118,171,174,0.18); }
 
-/* Nav link hover — teal glow underline */
-.nav-link {
-  position     : relative;
-  font-family  : var(--font-b);
-  font-size    : 14px;
-  font-weight  : 500;
-  letter-spacing: -0.01em;
-  color        : var(--text-2);
-  text-decoration: none;
-  transition   : color .22s ease;
-  white-space  : nowrap;
-  padding-bottom: 2px;
-}
-.nav-link::after {
-  content   : '';
-  position  : absolute;
-  bottom    : -2px;
-  left      : 50%;
-  width     : 0%;
-  height    : 1px;
-  background: var(--accent);
-  box-shadow: 0 0 8px var(--accent-glow);
-  transform : translateX(-50%);
-  transition: width .28s cubic-bezier(.22,1,.36,1);
-}
-.nav-link:hover {
-  color: var(--accent);
-  text-shadow: 0 0 12px var(--accent-glow);
-}
-.nav-link:hover::after { width: 100%; }
+.features-split-layout { display: grid; grid-template-columns: 1fr 460px; gap: 48px; align-items: start; margin-top: 56px; }
+.features-right-col { position: sticky; top: 100px; height: 560px; border-radius: 24px; overflow: hidden; border: 1px solid rgba(118,171,174,0.22); background: var(--hero-bg); box-shadow: 0 0 60px rgba(118,171,174,0.07), 0 24px 64px rgba(0,0,0,0.08); }
 
+.hud-corner { position: absolute; width: 16px; height: 16px; pointer-events: none; z-index: 20; }
+.hud-tl { top: 14px; left: 14px; border-top: 1.5px solid rgba(118,171,174,0.50); border-left: 1.5px solid rgba(118,171,174,0.50); }
+.hud-tr { top: 14px; right: 14px; border-top: 1.5px solid rgba(118,171,174,0.50); border-right: 1.5px solid rgba(118,171,174,0.50); }
+.hud-bl { bottom: 14px; left: 14px; border-bottom: 1.5px solid rgba(118,171,174,0.50); border-left: 1.5px solid rgba(118,171,174,0.50); }
+.hud-br { bottom: 14px; right: 14px; border-bottom: 1.5px solid rgba(118,171,174,0.50); border-right: 1.5px solid rgba(118,171,174,0.50); }
+@keyframes scanLine { 0% { top: -2px; opacity:0; } 5%{ opacity:1; } 95%{ opacity:1; } 100% { top: 100%; opacity:0; } }
+.scan-line { position: absolute; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(118,171,174,0.45), transparent); animation: scanLine 5s ease-in-out infinite; pointer-events: none; z-index: 20; }
+@keyframes statusPulse { 0%,100%{ opacity:.5; } 50%{ opacity:1; } }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: #76ABAE; box-shadow: 0 0 8px #76ABAE; animation: statusPulse 2s ease-in-out infinite; }
 
-/* ── Glass card ── */
-.glass {
-  background      : var(--bg-card);
-  border          : 1px solid var(--border);
-  border-radius   : var(--r);
-  backdrop-filter : blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  transition: background .3s, border-color .3s, box-shadow .3s;
-}
-.glass:hover {
-  background  : var(--bg-card-hov);
-  border-color: var(--border-lit);
-  box-shadow  : 0 0 40px var(--accent-dim), 0 20px 60px rgba(0,0,0,.15);
-}
-/* Shimmer sweep */
-.shimmer { position:relative; overflow:hidden; }
-.shimmer::before {
-  content   : '';
-  position  : absolute;
-  top:0; left:-100%;
-  width     : 55%;
-  height    : 100%;
-  background: linear-gradient(90deg,transparent,rgba(118,171,174,.06),transparent);
-  transition: left .75s ease;
-  pointer-events:none;
-}
-.shimmer:hover::before { left:160%; }
+.shader-cta-section { position: relative; overflow: hidden; padding: 0; }
+.shader-canvas-wrap { position: absolute; inset: 0; z-index: 0; opacity: 0.50; width: 100%; height: 100%; }
+.shader-cta-content { position: relative; z-index: 2; padding: 110px 24px 120px; }
+.shader-cta-section::after { content: ''; position: absolute; inset: 0; z-index: 1; background: radial-gradient(ellipse 80% 60% at 50% 50%, rgba(240,242,245,0.70) 0%, rgba(240,242,245,0.92) 100%); pointer-events: none; }
+.dark .shader-cta-section::after { background: radial-gradient(ellipse 80% 60% at 50% 50%, rgba(34,40,49,0.65) 0%, rgba(34,40,49,0.88) 100%); }
 
-/* ── Buttons ── */
-.btn { position:relative; overflow:hidden; cursor:pointer; }
-.btn-p {
-  background  : var(--accent);
-  color       : #fff;
-  font-family : var(--font-b);
-  font-weight : 600;
-  border      : none;
-  transition  : box-shadow .3s, filter .2s;
-}
-.btn-p:hover {
-  box-shadow: 0 0 26px var(--accent-glow), 0 6px 28px rgba(118,171,174,.2);
-  filter    : brightness(1.08);
-}
-.btn-s {
-  background  : var(--bg-card);
-  color       : var(--text-1);
-  border      : 1px solid var(--border);
-  font-family : var(--font-b);
-  font-weight : 600;
-  transition  : background .3s, border-color .3s;
-}
-.btn-s:hover { background:var(--bg-card-hov); border-color:var(--border-lit); }
-.ripple {
-  position     : absolute;
-  border-radius: 50%;
-  background   : rgba(255,255,255,.18);
-  transform    : scale(0);
-  animation    : rpl .65s ease-out forwards;
-  pointer-events:none;
-}
-@keyframes rpl { to { transform:scale(4); opacity:0; } }
+footer { border-top: 1px solid var(--border); padding: 60px 24px 44px; background: var(--surface); }
+.footer-bottom { border-top: 1px solid var(--border); padding-top: 24px; display: flex; justify-content: space-between; align-items: center; }
+.footer-bottom span { font-size: 12px; color: var(--t3); }
 
-/* ── Typography helpers ── */
-.display  { font-family:var(--font-d); font-weight:700; letter-spacing:-0.04em; line-height:1.08; }
-.nav-logo-text { font-family:var(--font-d); font-weight:700; letter-spacing:-0.03em; transition: font-size .4s ease; }
-.reveal-text { opacity:0; transform:translateY(50px); }
-.grad-h {
-  background: linear-gradient(130deg, var(--text-1) 0%, var(--accent) 55%, var(--teal-hi) 100%);
-  -webkit-background-clip:text;
-  -webkit-text-fill-color:transparent;
-  background-clip:text;
-}
+.lg-nav-link { font-size: 13px; font-weight: 500; color: var(--t2); text-decoration: none; letter-spacing: 0.01em; transition: color .2s; cursor: pointer; background: none; border: none; }
+.lg-nav-link:hover { color: var(--accent); }
 
-/* ── Blobs ── */
-.blob { position:absolute; border-radius:50%; filter:blur(88px); pointer-events:none; will-change:transform; }
-
-/* ── Feature card icon float ── */
-@keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
-.icon-float { animation:float 3.4s ease-in-out infinite; }
-
-/* ── Counter ── */
-.cval {
-  font-family  : var(--font-d);
-  font-size    : clamp(2.8rem,5.5vw,4.2rem);
-  letter-spacing: .06em;
-  line-height  : 1;
-  color        : var(--accent);
-}
-
-/* ── Showcase chat ── */
-.cbub { opacity:0; transform:translateY(14px); }
-
-/* ── Scrollbar ── */
-::-webkit-scrollbar { width:4px; }
-::-webkit-scrollbar-track { background:var(--bg-page); }
-::-webkit-scrollbar-thumb { background:var(--accent); border-radius:99px; }
+@keyframes arrPulse { 0%,100%{ transform:scaleY(1); opacity:.4 } 50%{ transform:scaleY(1.3); opacity:1 } }
+@media (max-width: 960px) { .features-split-layout { grid-template-columns: 1fr; } .features-right-col { position: relative; top: auto; height: 400px; } }
 `;
 
-/* ─────────────────────────────────────────────
-   DATA
-───────────────────────────────────────────── */
 const FEATURES = [
-  { Icon: MessageSquare, title: 'Real-Time Messaging', desc: 'Sub-100 ms delivery — typing indicators, threads, reactions.', col: '#76ABAE' },
-  { Icon: Hash, title: 'Organized Channels', desc: 'Structure conversations by team, project, or topic. Zero noise.', col: '#A8D8DA' },
-  { Icon: FolderOpen, title: 'Secure File Sharing', desc: 'Drag-and-drop with versioning and granular permissions.', col: '#76ABAE' },
-  { Icon: Shield, title: 'Role-Based Access', desc: 'Enterprise-grade — the right people see the right things.', col: '#A8D8DA' },
-  { Icon: Activity, title: 'Activity Tracking', desc: 'Timelines, audit logs, and productivity analytics built-in.', col: '#76ABAE' },
-  { Icon: Users, title: 'Scalable Architecture', desc: '99.99 % SLA. From 10 to 100,000 users without missing a beat.', col: '#A8D8DA' },
+    { title: "Real-Time Messaging", desc: "Sub-100 ms delivery — typing indicators, threads, reactions and full message history.", path: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" },
+    { title: "Organized Channels", desc: "Structure conversations by team, project, or topic. Zero noise, total context.", path: "M4 6h16M4 12h16M4 18h16" },
+    { title: "Secure File Sharing", desc: "Drag-and-drop uploads with versioning, previews, and granular permissions.", path: "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" },
+    { title: "Role-Based Access", desc: "Enterprise-grade security — the right people see exactly the right things.", path: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" },
+    { title: "Activity Tracking", desc: "Timelines, audit logs, and real-time productivity analytics built right in.", path: "M22 12h-4l-3 9L9 3l-3 9H2" },
+    { title: "Scalable Architecture", desc: "99.99% SLA. From 10 to 100,000+ users without missing a single beat.", path: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" },
 ];
-
 const STATS = [
-  { value: 99.99, suffix: '%', label: 'Uptime SLA', dec: 2 },
-  { value: 10, suffix: 'K+', label: 'Messages / day', dec: 0 },
-  { value: 2, suffix: 'K+', label: 'Teams worldwide', dec: 0 },
-  { value: 180, suffix: 'ms', label: 'Avg. delivery', dec: 0 },
+    { val: 99.99, suf: "%", label: "Uptime SLA", dec: 2 },
+    { val: 10, suf: "K+", label: "Messages / day", dec: 0 },
+    { val: 2, suf: "K+", label: "Teams worldwide", dec: 0 },
+    { val: 100, suf: "ms", label: "Avg. delivery", dec: 0 },
 ];
-
-const HOW = [
-  { n: '01', title: 'Create a Workspace', body: 'Set up your team environment in seconds — invite members, configure roles.' },
-  { n: '02', title: 'Organize Channels', body: 'Structure projects and topics with dedicated channels. Keep everything contextual.' },
-  { n: '03', title: 'Collaborate Live', body: 'Message, share files, and track activity in real time — from any device.' },
+const TESTIMONIALS = [
+    { name: "Sarah Chen", role: "CTO · Vertex AI", quote: "SyncUp replaced 4 tools overnight. The speed is genuinely unreal." },
+    { name: "James Okafor", role: "Head of Product · Narwhal Labs", quote: "Best team communication tool we've used in 7 years of building software." },
+    { name: "Priya Nair", role: "Engineering Lead · Cascade", quote: "The role-based access controls are exactly what enterprises need. Flawless." },
+    { name: "Tom Brinkley", role: "Founder · Foundry.io", quote: "Went from chaotic email threads to organized channels in under 10 minutes." },
+    { name: "Aiko Tanaka", role: "Design Director · Studio Zero", quote: "File sharing with previews is a game-changer. No more 'which version is this'." },
+    { name: "Lucas Ferreira", role: "VP Engineering · GridScale", quote: "99.99% uptime is not just a claim — zero incidents in 9 months." },
 ];
+const PRICING = [
+    { tier: "Free", price: "$0", period: "forever", desc: "Perfect for small teams just getting started.", features: ["Up to 10 members", "10K message history", "5GB file storage", "Basic channels", "Community support"], cta: "Get started free", featured: false },
+    { tier: "Pro", price: "$12", period: "per seat / mo", desc: "For growing teams that need more power.", features: ["Unlimited members", "Unlimited history", "100GB file storage", "Advanced analytics", "Priority support", "Custom integrations"], cta: "Start free trial", featured: true },
+    { tier: "Enterprise", price: "Custom", period: "contact us", desc: "Built for large organizations with complex needs.", features: ["SSO & SAML", "Audit logs & compliance", "Dedicated infrastructure", "SLA guarantees", "24/7 support", "Custom contracts"], cta: "Book a demo", featured: false },
+];
+const PARALLAX_IMAGES = [
+    { src: "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=1280&auto=format&fit=crop&q=80", label: "Live Collaboration" },
+    { src: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1280&auto=format&fit=crop&q=80", label: "Modern Workspace" },
+    { src: "https://images.unsplash.com/photo-1557683316-973673baf926?w=800&auto=format&fit=crop&q=80", label: "Visual Design" },
+    { src: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1280&auto=format&fit=crop&q=80", label: "Scale & Reach" },
+    { src: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&auto=format&fit=crop&q=80", label: "Creative Flow" },
+    { src: "https://images.unsplash.com/photo-1449824913935-59a10b8d2000?w=1280&auto=format&fit=crop&q=80", label: "Global Teams" },
+    { src: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1280&auto=format&fit=crop&q=80", label: "Remote First" },
+];
+const TOTAL_IMAGES = 20;
+const MAX_SCROLL = 3000;
+const IMG_W = 90, IMG_H = 126;
+const HERO_IMAGES = [
+    "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=400&q=80",
+    "https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=400&q=80",
+    "https://images.unsplash.com/photo-1497366216548-37526070297c?w=400&q=80",
+    "https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=400&q=80",
+    "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?w=400&q=80",
+    "https://images.unsplash.com/photo-1557804506-669a67965ba0?w=400&q=80",
+    "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=400&q=80",
+    "https://images.unsplash.com/photo-1472214103451-9374bd1c798e?w=400&q=80",
+    "https://images.unsplash.com/photo-1542744173-8e7e53415bb0?w=400&q=80",
+    "https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=400&q=80",
+    "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=400&q=80",
+    "https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=400&q=80",
+    "https://images.unsplash.com/photo-1465146344425-f00d5f5c8f07?w=400&q=80",
+    "https://images.unsplash.com/photo-1470252649378-9c29740c9fa8?w=400&q=80",
+    "https://images.unsplash.com/photo-1493246507139-91e8fad9978e?w=400&q=80",
+    "https://images.unsplash.com/photo-1559136555-9303baea8ebd?w=400&q=80",
+    "https://images.unsplash.com/photo-1553877522-43269d4ea984?w=400&q=80",
+    "https://images.unsplash.com/photo-1581291518633-83b4ebd1d83e?w=400&q=80",
+    "https://images.unsplash.com/photo-1531497865144-0464ef8fb9a9?w=400&q=80",
+    "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=400&q=80",
+];
+const lerp = (a, b, t) => a * (1 - t) + b * t;
 
-/* ─────────────────────────────────────────────
-   HOOKS
-───────────────────────────────────────────── */
-function useMagnetic(ready) {
-  useEffect(() => {
-    if (!ready) return;
-    const fns = [];
-    document.querySelectorAll('.btn-p,.btn-s').forEach((btn) => {
-      const enter = () => {
-        const mm = (e) => {
-          const r = btn.getBoundingClientRect();
-          gsap.to(btn, {
-            x: (e.clientX - r.left - r.width / 2) * 0.27,
-            y: (e.clientY - r.top - r.height / 2) * 0.27,
-            duration: 0.4, ease: 'power2.out', overwrite: 'auto',
-          });
+function SplineScene3D() {
+    const canvasRef = useRef(null);
+    const containerRef = useRef(null);
+    const mouseRef = useRef({ x: 0, y: 0, active: false });
+    const rafRef = useRef(null);
+    useEffect(() => {
+        const canvas = canvasRef.current, container = containerRef.current;
+        if (!canvas || !container) return;
+        const ctx = canvas.getContext('2d');
+        const resize = () => { canvas.width = container.clientWidth; canvas.height = container.clientHeight; };
+        resize(); window.addEventListener('resize', resize, { passive: true });
+        const onMouseMove = (e) => { const r = container.getBoundingClientRect(); mouseRef.current = { x: ((e.clientX - r.left) / r.width - 0.5) * 2, y: -((e.clientY - r.top) / r.height - 0.5) * 2, active: true }; };
+        const onMouseLeave = () => { mouseRef.current = { x: 0, y: 0, active: false }; };
+        container.addEventListener('mousemove', onMouseMove);
+        container.addEventListener('mouseleave', onMouseLeave);
+        const particles = Array.from({ length: 120 }, () => { const r = 140 + Math.random() * 90, theta = Math.random() * Math.PI * 2, phi = Math.acos(2 * Math.random() - 1); return { r, theta, phi, speed: 0.002 + Math.random() * 0.003, size: 1 + Math.random() * 1.5, opacity: 0.3 + Math.random() * 0.5 }; });
+        const orbits = [{ rx: 110, ry: 28, tilt: 0.3, speed: 0.008, color: 'rgba(118,171,174,' }, { rx: 145, ry: 40, tilt: -0.5, speed: -0.006, color: 'rgba(158,205,208,' }, { rx: 175, ry: 20, tilt: 0.8, speed: 0.004, color: 'rgba(118,171,174,' }];
+        const satellites = orbits.map((o, oi) => ({ orbitIdx: oi, angle: (oi / orbits.length) * Math.PI * 2, speed: o.speed * 1.5, size: 4 + oi * 1.5 }));
+        let t = 0, camX = 0, camY = 0;
+        const draw = () => {
+            const W = canvas.width, H = canvas.height, cx = W / 2, cy = H / 2;
+            ctx.clearRect(0, 0, W, H);
+            camX += (mouseRef.current.x * 18 - camX) * 0.05; camY += (-mouseRef.current.y * 12 - camY) * 0.05;
+            const R = 72 * (1 + Math.sin(t * 0.8) * 0.015);
+            const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, 220);
+            bg.addColorStop(0, 'rgba(118,171,174,0.07)'); bg.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+            particles.forEach(p => { p.theta += p.speed; const x3 = p.r * Math.sin(p.phi) * Math.cos(p.theta + t * 0.1), y3 = p.r * Math.cos(p.phi) * 0.45, z3 = p.r * Math.sin(p.phi) * Math.sin(p.theta + t * 0.1); const sx = cx + x3 + camX * (p.r / 200), sy = cy + y3 + camY * (p.r / 200), ds = 0.6 + (z3 / p.r) * 0.4; ctx.beginPath(); ctx.arc(sx, sy, p.size * ds * 0.8, 0, Math.PI * 2); ctx.fillStyle = `rgba(118,171,174,${p.opacity * ds * 0.7})`; ctx.fill(); });
+            orbits.forEach((o, i) => { const oa = t * o.speed * 60; ctx.save(); ctx.translate(cx + camX * 0.4, cy + camY * 0.4); ctx.rotate(o.tilt); ctx.beginPath(); for (let s = 0; s <= 80; s++) { const a = (s / 80) * Math.PI * 2, ex = Math.cos(a + oa) * o.rx, ey = Math.sin(a + oa) * o.ry; s === 0 ? ctx.moveTo(ex, ey) : ctx.lineTo(ex, ey); } ctx.closePath(); const rg = ctx.createLinearGradient(-o.rx, 0, o.rx, 0), ba = 0.5 + Math.sin(t * 0.4 + i) * 0.15; rg.addColorStop(0, o.color + '0)'); rg.addColorStop(0.3, o.color + ba + ')'); rg.addColorStop(0.7, o.color + ba + ')'); rg.addColorStop(1, o.color + '0)'); ctx.strokeStyle = rg; ctx.lineWidth = i === 1 ? 1.5 : 1; ctx.stroke(); ctx.restore(); });
+            satellites.forEach((sat, si) => { sat.angle += sat.speed; const o = orbits[sat.orbitIdx], sx = Math.cos(sat.angle) * o.rx, sy2 = Math.sin(sat.angle) * o.ry, ang = o.tilt, sxs = cx + camX * 0.4 + sx * Math.cos(ang) - sy2 * Math.sin(ang), sys = cy + camY * 0.4 + sx * Math.sin(ang) + sy2 * Math.cos(ang); const gr = ctx.createRadialGradient(sxs, sys, 0, sxs, sys, sat.size * 4); gr.addColorStop(0, 'rgba(118,171,174,0.6)'); gr.addColorStop(1, 'rgba(118,171,174,0)'); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(sxs, sys, sat.size * 4, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(sxs, sys, sat.size, 0, Math.PI * 2); ctx.fillStyle = si === 1 ? '#9ECDD0' : '#76ABAE'; ctx.fill(); });
+            const halo = ctx.createRadialGradient(cx + camX * 0.2, cy + camY * 0.2, R * 0.5, cx + camX * 0.2, cy + camY * 0.2, R * 2.2); halo.addColorStop(0, 'rgba(118,171,174,0)'); halo.addColorStop(0.4, 'rgba(118,171,174,0.09)'); halo.addColorStop(1, 'rgba(0,0,0,0)'); ctx.beginPath(); ctx.arc(cx + camX * 0.2, cy + camY * 0.2, R * 2.2, 0, Math.PI * 2); ctx.fillStyle = halo; ctx.fill();
+            const sg = ctx.createRadialGradient(cx + camX * 0.2 - R * 0.3, cy + camY * 0.2 - R * 0.35, R * 0.05, cx + camX * 0.2, cy + camY * 0.2, R); sg.addColorStop(0, 'rgba(200,230,232,0.90)'); sg.addColorStop(0.15, 'rgba(118,171,174,0.65)'); sg.addColorStop(0.4, 'rgba(60,90,110,0.90)'); sg.addColorStop(0.75, 'rgba(34,40,49,1)'); sg.addColorStop(1, 'rgba(26,32,37,1)'); ctx.beginPath(); ctx.arc(cx + camX * 0.2, cy + camY * 0.2, R, 0, Math.PI * 2); ctx.fillStyle = sg; ctx.fill();
+            const es = 0.12 + Math.sin(t * 1.1) * 0.05, eg = ctx.createRadialGradient(cx + camX * 0.2, cy + camY * 0.2, 0, cx + camX * 0.2, cy + camY * 0.2, R * 0.7); eg.addColorStop(0, `rgba(118,171,174,${es})`); eg.addColorStop(1, 'rgba(118,171,174,0)'); ctx.beginPath(); ctx.arc(cx + camX * 0.2, cy + camY * 0.2, R, 0, Math.PI * 2); ctx.fillStyle = eg; ctx.fill();
+            const rg2 = ctx.createRadialGradient(cx + camX * 0.2 + R * 0.7, cy + camY * 0.2 + R * 0.55, 0, cx + camX * 0.2 + R * 0.5, cy + camY * 0.2 + R * 0.4, R * 0.75); rg2.addColorStop(0, 'rgba(118,171,174,0.30)'); rg2.addColorStop(1, 'rgba(118,171,174,0)'); ctx.beginPath(); ctx.arc(cx + camX * 0.2, cy + camY * 0.2, R, 0, Math.PI * 2); ctx.fillStyle = rg2; ctx.fill();
+            const specX = cx + camX * 0.2 - R * 0.28, specY = cy + camY * 0.2 - R * 0.32, spg = ctx.createRadialGradient(specX, specY, 0, specX, specY, R * 0.38); spg.addColorStop(0, 'rgba(255,255,255,0.75)'); spg.addColorStop(0.3, 'rgba(220,240,242,0.28)'); spg.addColorStop(1, 'rgba(255,255,255,0)'); ctx.beginPath(); ctx.arc(cx + camX * 0.2, cy + camY * 0.2, R, 0, Math.PI * 2); ctx.fillStyle = spg; ctx.fill();
+            ctx.save(); ctx.beginPath(); ctx.arc(cx + camX * 0.2, cy + camY * 0.2, R, 0, Math.PI * 2); ctx.clip(); const wa = 0.06 + Math.sin(t * 0.3) * 0.02; ctx.strokeStyle = `rgba(118,171,174,${wa})`; ctx.lineWidth = 0.5; for (let lat = -80; lat <= 80; lat += 40) { const lr = Math.cos((lat * Math.PI) / 180) * R, ly = Math.sin((lat * Math.PI) / 180) * R; ctx.beginPath(); ctx.ellipse(cx + camX * 0.2, cy + camY * 0.2 + ly, lr, lr * 0.15, 0, 0, Math.PI * 2); ctx.stroke(); } for (let lng = 0; lng < 360; lng += 60) { const lr2 = (lng + t * 8) * Math.PI / 180; ctx.beginPath(); ctx.ellipse(cx + camX * 0.2, cy + camY * 0.2, R * Math.abs(Math.cos(lr2)), R, lr2 > Math.PI / 2 && lr2 < Math.PI * 1.5 ? lr2 + Math.PI : lr2, 0, Math.PI * 2); ctx.stroke(); } ctx.restore();
+            satellites.forEach(sat => { const o = orbits[sat.orbitIdx], ang = o.tilt, sx2 = Math.cos(sat.angle) * o.rx, sy2 = Math.sin(sat.angle) * o.ry, sxs = cx + camX * 0.4 + sx2 * Math.cos(ang) - sy2 * Math.sin(ang), sys = cy + camY * 0.4 + sx2 * Math.sin(ang) + sy2 * Math.cos(ang), d = Math.hypot(sxs - (cx + camX * 0.2), sys - (cy + camY * 0.2)); if (d < 200) { ctx.beginPath(); ctx.moveTo(cx + camX * 0.2, cy + camY * 0.2); ctx.lineTo(sxs, sys); ctx.strokeStyle = `rgba(118,171,174,${(1 - d / 200) * 0.22})`; ctx.lineWidth = 0.8; ctx.stroke(); } });
+            t += 0.012; rafRef.current = requestAnimationFrame(draw);
         };
-        btn.addEventListener('mousemove', mm, { passive: true });
-        btn._mm = mm;
-      };
-      const leave = () => {
-        if (btn._mm) { btn.removeEventListener('mousemove', btn._mm); delete btn._mm; }
-        gsap.to(btn, { x: 0, y: 0, duration: 0.55, ease: 'elastic.out(1.2,.5)', overwrite: 'auto' });
-      };
-      btn.addEventListener('mouseenter', enter);
-      btn.addEventListener('mouseleave', leave);
-      fns.push(() => { btn.removeEventListener('mouseenter', enter); btn.removeEventListener('mouseleave', leave); });
-    });
-    return () => fns.forEach(f => f());
-  }, [ready]);
+        draw();
+        return () => { cancelAnimationFrame(rafRef.current); window.removeEventListener('resize', resize); container.removeEventListener('mousemove', onMouseMove); container.removeEventListener('mouseleave', onMouseLeave); };
+    }, []);
+    return (
+        <div ref={containerRef} style={{ position: 'relative', width: '100%', height: '100%' }}>
+            <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
+            <div className="hud-corner hud-tl" /><div className="hud-corner hud-tr" /><div className="hud-corner hud-bl" /><div className="hud-corner hud-br" />
+            <div className="scan-line" />
+            <div style={{ position: 'absolute', top: 14, left: 20, right: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 20, pointerEvents: 'none' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}><div className="status-dot" /><span style={{ fontFamily: 'var(--fb)', fontSize: 9, fontWeight: 700, letterSpacing: '.2em', color: 'rgba(118,171,174,0.7)', textTransform: 'uppercase' }}>Active</span></div>
+                <span style={{ fontFamily: 'var(--fb)', fontSize: 9, color: 'rgba(118,171,174,0.45)', letterSpacing: '.1em' }}>3D · LIVE</span>
+            </div>
+            <div style={{ position: 'absolute', bottom: 18, left: '50%', transform: 'translateX(-50%)', fontFamily: 'var(--fb)', fontSize: 9, fontWeight: 700, letterSpacing: '.22em', color: 'rgba(118,171,174,0.45)', textTransform: 'uppercase', whiteSpace: 'nowrap', zIndex: 20, pointerEvents: 'none' }}>SyncUp · Live Network · v2.4.1</div>
+        </div>
+    );
 }
 
-function useRipple() {
-  useEffect(() => {
-    const h = (e) => {
-      const btn = e.target.closest('.btn');
-      if (!btn) return;
-      const rip = document.createElement('span');
-      rip.className = 'ripple';
-      const rect = btn.getBoundingClientRect();
-      const sz = Math.max(rect.width, rect.height);
-      Object.assign(rip.style, {
-        width: `${sz}px`, height: `${sz}px`,
-        left: `${e.clientX - rect.left - sz / 2}px`,
-        top: `${e.clientY - rect.top - sz / 2}px`,
-      });
-      btn.appendChild(rip);
-      setTimeout(() => rip.remove(), 750);
-    };
-    document.addEventListener('click', h, { passive: true });
-    return () => document.removeEventListener('click', h);
-  }, []);
+function ParallaxFeatureCard({ feature, index, isVisible }) {
+    const cardRef = useRef(null), rafRef = useRef(null), cur = useRef({ x: 0, y: 0 }), tgt = useRef({ x: 0, y: 0 }), iconRef = useRef(null), titleRef = useRef(null), descRef = useRef(null);
+    const [settled, setSettled] = useState(false);
+    useEffect(() => { if (!isVisible) return; const t = setTimeout(() => setSettled(true), index * 110 + 700); return () => clearTimeout(t); }, [isVisible, index]);
+    useEffect(() => {
+        if (!settled) return;
+        const card = cardRef.current; if (!card) return;
+        const onMove = e => { const r = card.getBoundingClientRect(); tgt.current = { x: ((e.clientY - r.top - r.height / 2) / (r.height / 2)) * -10, y: ((e.clientX - r.left - r.width / 2) / (r.width / 2)) * 10 }; };
+        const onLeave = () => { tgt.current = { x: 0, y: 0 }; };
+        const tick = () => { cur.current.x += (tgt.current.x - cur.current.x) * 0.08; cur.current.y += (tgt.current.y - cur.current.y) * 0.08; const { x, y } = cur.current; card.style.transform = `perspective(900px) rotateX(${x}deg) rotateY(${y}deg) translateZ(4px)`; if (iconRef.current) iconRef.current.style.transform = `translate(${y * 0.3}px,${x * -0.3}px) scale(1.05)`; if (titleRef.current) titleRef.current.style.transform = `translate(${y * 0.15}px,${x * -0.15}px)`; if (descRef.current) descRef.current.style.transform = `translate(${y * 0.07}px,${x * -0.07}px)`; rafRef.current = requestAnimationFrame(tick); };
+        card.addEventListener("mousemove", onMove); card.addEventListener("mouseleave", onLeave); rafRef.current = requestAnimationFrame(tick);
+        return () => { card.removeEventListener("mousemove", onMove); card.removeEventListener("mouseleave", onLeave); cancelAnimationFrame(rafRef.current); };
+    }, [settled]);
+    return (
+        <div style={{ opacity: isVisible ? 1 : 0, transform: isVisible ? "translateY(0)" : "translateY(52px)", transition: `opacity .65s cubic-bezier(.22,1,.36,1) ${index * 0.11}s, transform .65s cubic-bezier(.22,1,.36,1) ${index * 0.11}s` }}>
+            <div ref={cardRef} className="glass feat-card feat-card-float" style={{ transformOrigin: "center center", transformStyle: "preserve-3d", cursor: "default", position: "relative", overflow: "hidden", transition: settled ? "box-shadow .3s, border-color .3s" : "none" }}>
+                <div style={{ position: "absolute", inset: 0, borderRadius: "inherit", background: "linear-gradient(135deg,rgba(118,171,174,0.04) 0%,transparent 55%)", pointerEvents: "none", zIndex: 0 }} />
+                <div ref={iconRef} className="feat-icon feat-icon-glow" style={{ position: "relative", zIndex: 1, transition: "transform .1s" }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={feature.path} /></svg></div>
+                <h3 ref={titleRef} style={{ position: "relative", zIndex: 1, fontFamily: "var(--fd)", fontSize: 20, fontWeight: 400, color: "var(--t1)", marginBottom: 10, transition: "transform .1s" }}>{feature.title}</h3>
+                <p ref={descRef} style={{ position: "relative", zIndex: 1, fontSize: "13.5px", color: "var(--t2)", lineHeight: 1.7, transition: "transform .1s" }}>{feature.desc}</p>
+            </div>
+        </div>
+    );
 }
 
-/* ─────────────────────────────────────────────
-   COMPONENT
-───────────────────────────────────────────── */
-export default function LandingPage() {
-  const navigate = useNavigate();
-  const [dark, setDark] = useState(true);
-  const [ready, setReady] = useState(false);
+function FlipCard({ src, index, target }) {
+    return (
+        <motion.div animate={{ x: target.x, y: target.y, rotate: target.rotation, scale: target.scale, opacity: target.opacity }} transition={{ type: "spring", stiffness: 40, damping: 15 }} style={{ position: "absolute", width: IMG_W, height: IMG_H, transformStyle: "preserve-3d", perspective: "1000px" }}>
+            <motion.div style={{ transformStyle: "preserve-3d", width: '100%', height: '100%', position: 'relative' }} transition={{ duration: 0.6, type: "spring", stiffness: 260, damping: 20 }} whileHover={{ rotateY: 180 }}>
+                <div style={{ position: 'absolute', inset: 0, backfaceVisibility: "hidden", background: "#e8edf2", borderRadius: 12, overflow: 'hidden', boxShadow: "0 8px 28px rgba(0,0,0,0.12), 0 0 0 1px rgba(118,171,174,0.18)" }}>
+                    <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.88 }} />
+                    <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, rgba(118,171,174,0.06) 0%, rgba(240,242,245,0.22) 100%)" }} />
+                </div>
+                <div style={{ position: 'absolute', inset: 0, backfaceVisibility: "hidden", transform: "rotateY(180deg)", background: "linear-gradient(135deg, #f0f2f5 0%, #dde8ea 100%)", border: "1px solid rgba(118,171,174,0.25)", borderRadius: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: "linear-gradient(135deg,#76ABAE,#9ECDD0)", marginBottom: 8 }} />
+                    <p style={{ fontSize: 9, fontWeight: 700, color: "#76ABAE", letterSpacing: ".2em", textTransform: "uppercase" }}>SyncUp</p>
+                </div>
+            </motion.div>
+        </motion.div>
+    );
+}
 
-  const loaderRef = useRef(null);
-  const mainRef = useRef(null);
-  const featRef = useRef(null);
-  const statsRef = useRef(null);
-  const pinRef = useRef(null);
-  const howRef = useRef(null);
-  const ctaRef = useRef(null);
+function ScrollMorphHero({ onReady }) {
+    const [introPhase, setIntroPhase] = useState("scatter");
+    const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+    const containerRef = useRef(null);
+    const scrollRef = useRef(0);
+    const virtualScroll = useMotionValue(0);
+    useEffect(() => {
+        if (!containerRef.current) return;
+        const obs = new ResizeObserver(entries => { for (const e of entries) setContainerSize({ width: e.contentRect.width, height: e.contentRect.height }); });
+        obs.observe(containerRef.current);
+        setContainerSize({ width: containerRef.current.offsetWidth, height: containerRef.current.offsetHeight });
+        return () => obs.disconnect();
+    }, []);
+    useEffect(() => {
+        const onScroll = () => {
+            const v = Math.min(window.scrollY * 2.5, MAX_SCROLL);
+            scrollRef.current = v;
+            virtualScroll.set(v);
+        };
+        window.addEventListener("scroll", onScroll, { passive: true });
+        return () => window.removeEventListener("scroll", onScroll);
+    }, [virtualScroll]);
+    const morphProgress = useTransform(virtualScroll, [0, 700], [0, 1]);
+    const smoothMorph = useSpring(morphProgress, { stiffness: 40, damping: 20 });
+    const scrollRotate = useTransform(virtualScroll, [700, 3000], [0, 360]);
+    const smoothScrollRotate = useSpring(scrollRotate, { stiffness: 40, damping: 20 });
+    const mouseX = useMotionValue(0);
+    const smoothMouseX = useSpring(mouseX, { stiffness: 30, damping: 20 });
+    useEffect(() => { const el = containerRef.current; if (!el) return; const onMove = e => { const rect = el.getBoundingClientRect(); mouseX.set(((e.clientX - rect.left) / rect.width * 2 - 1) * 80); }; el.addEventListener("mousemove", onMove); return () => el.removeEventListener("mousemove", onMove); }, [mouseX]);
+    useEffect(() => { const t1 = setTimeout(() => setIntroPhase("line"), 400), t2 = setTimeout(() => setIntroPhase("circle"), 2200), t3 = setTimeout(() => onReady?.(), 2800); return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); }; }, [onReady]);
+    const [morphVal, setMorphVal] = useState(0), [rotateVal, setRotateVal] = useState(0), [parallaxVal, setParallaxVal] = useState(0);
+    useEffect(() => { const u1 = smoothMorph.on("change", setMorphVal), u2 = smoothScrollRotate.on("change", setRotateVal), u3 = smoothMouseX.on("change", setParallaxVal); return () => { u1(); u2(); u3(); }; }, [smoothMorph, smoothScrollRotate, smoothMouseX]);
+    const contentOpacity = useTransform(smoothMorph, [0.75, 1], [0, 1]);
+    const contentY = useTransform(smoothMorph, [0.75, 1], [24, 0]);
+    const scatterPos = useMemo(() => HERO_IMAGES.map(() => ({ x: (Math.random() - 0.5) * 1600, y: (Math.random() - 0.5) * 1000, rotation: (Math.random() - 0.5) * 200, scale: 0.5, opacity: 0 })), []);
+    return (
+        <div ref={containerRef} style={{ position: "relative", width: "100%", height: "100%", overflow: "hidden", background: "var(--hero-bg)" }}>
+            <div className="hero-grid-overlay" />
+            <div style={{ position: "absolute", top: "20%", left: "30%", width: 600, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(118,171,174,0.10) 0%, transparent 70%)", filter: "blur(60px)", pointerEvents: "none", zIndex: 0 }} />
+            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 0, pointerEvents: "none" }}>
+                <motion.h1 initial={{ opacity: 0, y: 20, filter: "blur(10px)" }} animate={introPhase === "circle" && morphVal < 0.5 ? { opacity: 1 - morphVal * 2, y: 0, filter: "blur(0px)" } : { opacity: 0, filter: "blur(10px)" }} transition={{ duration: 1 }} style={{ fontFamily: "var(--fd)", fontSize: "clamp(2.2rem, 5vw, 4.5rem)", fontWeight: 400, color: "var(--t1)", textAlign: "center", lineHeight: 1.1 }}>
+                    Work <em style={{ fontStyle: "italic", color: "#76ABAE" }}>Together.</em>
+                </motion.h1>
+            </div>
+            <motion.div style={{ opacity: contentOpacity, y: contentY, position: "absolute", top: "8%", left: 0, right: 0, zIndex: 15, pointerEvents: morphVal > 0.85 ? "all" : "none", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", padding: "0 24px" }}>
+                <p style={{ fontFamily: "var(--fb)", fontSize: 11, fontWeight: 700, letterSpacing: ".28em", textTransform: "uppercase", color: "rgba(118,171,174,0.85)", marginBottom: 14 }}>Real-time team collaboration</p>
+                <h1 style={{ fontFamily: "var(--fd)", fontSize: "clamp(2.8rem, 6vw, 5.5rem)", fontWeight: 400, color: "var(--t1)", lineHeight: 1.05, marginBottom: 28 }}>Work <em style={{ fontStyle: "italic", color: "#76ABAE" }}>Together.</em></h1>
+                <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+                    <Link to="/register" className="btn btn-p" style={{ padding: "13px 28px", borderRadius: 13, fontSize: 14, textDecoration: "none" }}>Get Started Free <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7" /></svg></Link>
+                    <button className="btn btn-s" style={{ padding: "13px 28px", borderRadius: 13, fontSize: 14 }}>Watch demo</button>
+                </div>
+            </motion.div>
+            <div style={{ position: "relative", width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {HERO_IMAGES.slice(0, TOTAL_IMAGES).map((src, i) => {
+                    let target = { x: 0, y: 0, rotation: 0, scale: 1, opacity: 1 };
+                    if (introPhase === "scatter") { target = scatterPos[i]; }
+                    else if (introPhase === "line") { const spacing = IMG_W + 14, total = TOTAL_IMAGES * spacing; target = { x: i * spacing - total / 2, y: 0, rotation: 0, scale: 1, opacity: 1 }; }
+                    else {
+                        const { width: W, height: H } = containerSize, isMobile = W < 768, minDim = Math.min(W, H), cRadius = Math.min(minDim * 0.32, 300), cAngle = (i / TOTAL_IMAGES) * 360, cRad = (cAngle * Math.PI) / 180, circlePos = { x: Math.cos(cRad) * cRadius, y: Math.sin(cRad) * cRadius, rotation: cAngle + 90 };
+                        const baseRadius = Math.min(W, H * 1.5), arcRadius = baseRadius * (isMobile ? 1.45 : 1.15), arcApexY = H * (isMobile ? 0.38 : 0.28), arcCenterY = arcApexY + arcRadius, spreadAngle = isMobile ? 105 : 135, startAngle = -90 - spreadAngle / 2, step = spreadAngle / (TOTAL_IMAGES - 1), scrollProgress = Math.min(Math.max(rotateVal / 360, 0), 1), curAngle = startAngle + i * step + (-scrollProgress * spreadAngle * 0.8), arcRad = (curAngle * Math.PI) / 180, arcPos = { x: Math.cos(arcRad) * arcRadius + parallaxVal, y: Math.sin(arcRad) * arcRadius + arcCenterY, rotation: curAngle + 90, scale: isMobile ? 1.5 : 1.9 };
+                        target = { x: lerp(circlePos.x, arcPos.x, morphVal), y: lerp(circlePos.y, arcPos.y, morphVal), rotation: lerp(circlePos.rotation, arcPos.rotation, morphVal), scale: lerp(1, arcPos.scale, morphVal), opacity: 1 };
+                    }
+                    return <FlipCard key={i} src={src} index={i} target={target} />;
+                })}
+            </div>
+            <motion.div style={{ position: "absolute", bottom: 38, left: "50%", transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, fontFamily: "var(--fb)", fontSize: 11, fontWeight: 600, letterSpacing: ".22em", textTransform: "uppercase", color: "var(--t3)", pointerEvents: "none", zIndex: 20 }} animate={morphVal > 0.5 ? { opacity: 0 } : { opacity: 1 }} transition={{ duration: 0.5 }}>
+                <span>Scroll to explore</span>
+                <div style={{ width: 1, height: 40, background: "linear-gradient(180deg, #76ABAE, transparent)", animation: "arrPulse 2s ease-in-out infinite" }} />
+            </motion.div>
+        </div>
+    );
+}
 
-  useMagnetic(ready);
-  useRipple();
-
-  /* Theme */
-  useEffect(() => {
-    document.documentElement.classList.toggle('light-mode', !dark);
-  }, [dark]);
-
-  /* Inject CSS */
-  useEffect(() => {
-    const el = document.createElement('style');
-    el.id = 'su-global';
-    el.textContent = GLOBAL_CSS;
-    if (!document.getElementById('su-global')) document.head.appendChild(el);
-    return () => document.getElementById('su-global')?.remove();
-  }, []);
-
-  /* ── Loader + hero stagger ── */
-  useEffect(() => {
-    const loader = loaderRef.current;
-    const main = mainRef.current;
-    if (!loader || !main) return;
-    gsap.set(main, { opacity: 0 });
-
-    const ctx = gsap.context(() => {
-      const tl = gsap.timeline({
-        onComplete: () => { setReady(true); ScrollTrigger.refresh(); }
-      });
-      tl.to('.l-mark', { opacity: 1, y: 0, duration: 0.55, ease: 'power3.out' })
-        .to('.l-sub', { opacity: 1, duration: 0.3 }, '-=0.15')
-        .to('.l-fill', { width: '100%', duration: 1.4, ease: 'power4.inOut' }, '-=0.2')
-        .to(loader, { yPercent: -100, duration: 0.85, ease: 'expo.inOut', delay: 0.1 })
-        .to(main, { opacity: 1, duration: 0.4 }, '-=0.55')
-        .to('#su-hero .reveal-text', {
-          y: 0, opacity: 1, duration: 1.15, stagger: 0.13, ease: 'power4.out',
-        }, '-=0.3')
-        // Navbar slides down from y:-100 with expo.out — iOS spring feel
-        .to('.navbar-pill', {
-          y: 0, opacity: 1, duration: 1.0, ease: 'expo.out',
-        }, '-=0.85')
-        .set(loader, { display: 'none' });
-    });
-    return () => ctx.revert();
-  }, []);
-
-  /* ── All ScrollTrigger animations ── */
-  useEffect(() => {
-    if (!ready) return;
-    const ctx = gsap.context(() => {
-
-      /* Section entrances */
-      gsap.utils.toArray('.section-entry').forEach((sec) => {
-        gsap.fromTo(sec,
-          { opacity: 0, y: 54 },
-          {
-            opacity: 1, y: 0, duration: 1.1, ease: 'power3.out',
-            scrollTrigger: { trigger: sec, start: 'top 88%', toggleActions: 'play none none none' }
-          });
-        const texts = sec.querySelectorAll('.reveal-text');
-        if (texts.length)
-          gsap.fromTo(texts,
-            { opacity: 0, y: 40 },
-            {
-              opacity: 1, y: 0, duration: 0.9, stagger: 0.11, ease: 'power3.out',
-              scrollTrigger: { trigger: sec, start: 'top 85%', toggleActions: 'play none none none' }
-            });
-      });
-
-      /* Feature cards stagger */
-      if (featRef.current)
-        gsap.fromTo(featRef.current.querySelectorAll('.feat-card'),
-          { opacity: 0, y: 60, scale: 0.94 },
-          {
-            opacity: 1, y: 0, scale: 1, duration: 0.8, stagger: 0.1, ease: 'power3.out',
-            scrollTrigger: { trigger: featRef.current, start: 'top 82%', toggleActions: 'play none none none' }
-          });
-
-      /* Counters */
-      if (statsRef.current)
-        STATS.forEach((s, i) => {
-          const el = document.getElementById(`ctr-${i}`);
-          if (!el) return;
-          ScrollTrigger.create({
-            trigger: statsRef.current, start: 'top 80%', once: true,
-            onEnter: () => {
-              gsap.fromTo({ v: 0 }, { v: s.value },
-                {
-                  duration: 2.4, ease: 'power2.out',
-                  onUpdate: function () { el.textContent = this.targets()[0].v.toFixed(s.dec) + s.suffix; }
-                });
-            }
-          });
-        });
-
-      /* Pinned showcase — scroll-scrubbed chat bubbles */
-      if (pinRef.current) {
-        const bubbles = pinRef.current.querySelectorAll('.cbub');
-        const stl = gsap.timeline({
-          scrollTrigger: {
-            trigger: pinRef.current,
-            start: 'top top',
-            end: `+=${bubbles.length * 130 + 200}`,
-            pin: true,
-            scrub: 1.4,
-            anticipatePin: 1,
-          }
-        });
-        bubbles.forEach((b) => stl.to(b, { opacity: 1, y: 0, duration: 0.5, ease: 'power2.out' }));
-      }
-
-      /* Workflow line-draw + step slide */
-      if (howRef.current) {
-        const line = howRef.current.querySelector('.hw-line');
-        if (line)
-          gsap.fromTo(line,
-            { scaleY: 0, transformOrigin: 'top center' },
-            {
-              scaleY: 1, duration: 1.7, ease: 'power2.inOut',
-              scrollTrigger: { trigger: howRef.current, start: 'top 78%', toggleActions: 'play none none none' }
-            });
-        gsap.fromTo(howRef.current.querySelectorAll('.hw-step'),
-          { opacity: 0, x: -34 },
-          {
-            opacity: 1, x: 0, duration: 0.75, stagger: 0.2, ease: 'power3.out',
-            scrollTrigger: { trigger: howRef.current, start: 'top 78%', toggleActions: 'play none none none' }
-          });
-      }
-
-      /* CTA */
-      if (ctaRef.current)
-        gsap.fromTo(ctaRef.current,
-          { opacity: 0, scale: 0.91, y: 42 },
-          {
-            opacity: 1, scale: 1, y: 0, duration: 1.2, ease: 'power4.out',
-            scrollTrigger: { trigger: ctaRef.current, start: 'top 87%', toggleActions: 'play none none none' }
-          });
-
-      /* Hero visual parallax */
-      gsap.to('#su-hero .hero-vis', {
-        yPercent: 22, ease: 'none',
-        scrollTrigger: { trigger: '#su-hero', start: 'top top', end: 'bottom top', scrub: 1 }
-      });
-
-      /* Blob slow drift */
-      gsap.utils.toArray('.blob').forEach((b, i) => {
-        gsap.to(b, {
-          x: `${(i % 2 ? -1 : 1) * 65}px`,
-          y: `${(i % 3 ? -1 : 1) * 85}px`,
-          duration: 14 + i * 2.5, ease: 'sine.inOut', repeat: -1, yoyo: true,
-        });
-      });
-    });
-    return () => ctx.revert();
-  }, [ready]);
-
-  /* Navbar scroll: shrink height 64→50, width, scale + deeper glass */
-  useEffect(() => {
-    const nav = document.querySelector('.navbar-pill');
-    if (!nav) return;
-    let last = false;
-    const fn = () => {
-      const scrolled = window.scrollY > 60;
-      if (scrolled === last) return;
-      last = scrolled;
-      nav.classList.toggle('compact', scrolled);
-      // GSAP animates scale; CSS transition handles height/width/padding
-      gsap.to(nav, {
-        scale: scrolled ? 0.97 : 1,
-        duration: scrolled ? 0.45 : 0.65,
-        ease: scrolled ? 'power2.out' : 'elastic.out(1.1,0.6)',
-        overwrite: 'auto',
-      });
-      // Shrink logo text size smoothly
-      const logoText = nav.querySelector('.nav-logo-text');
-      if (logoText) {
-        gsap.to(logoText, {
-          fontSize: scrolled ? '15px' : '18px',
-          duration: 0.4, ease: 'power2.out', overwrite: 'auto',
-        });
-      }
-    };
-    window.addEventListener('scroll', fn, { passive: true });
-    return () => window.removeEventListener('scroll', fn);
-  }, []);
-
-  /* Scroll progress */
-  useEffect(() => {
-    const bar = document.getElementById('su-progress');
-    if (!bar) return;
-    const fn = () => {
-      const d = document.documentElement;
-      bar.style.width = `${Math.min((d.scrollTop / (d.scrollHeight - d.clientHeight)) * 100, 100)}%`;
-    };
-    addEventListener('scroll', fn, { passive: true });
-    return () => removeEventListener('scroll', fn);
-  }, []);
-
-  /* ─────────────────────────────────────────
-     SHARED INLINE STYLES (tokens → objects)
-  ───────────────────────────────────────── */
-  const S = {
-    wrap: { maxWidth: 1200, margin: '0 auto', padding: '0 24px' },
-    sLabel: { fontFamily: 'var(--font-b)', fontSize: 11, fontWeight: 600, letterSpacing: '.22em', color: 'var(--accent)', textTransform: 'uppercase', marginBottom: 16 },
-    h2: { fontFamily: 'var(--font-d)', fontWeight: 800, fontSize: 'clamp(2.2rem,5.5vw,3.8rem)', letterSpacing: '-0.05em', color: 'var(--text-1)', lineHeight: 1.1, marginBottom: 18 },
-    body: { fontFamily: 'var(--font-b)', fontWeight: 400, fontSize: 16, color: 'var(--text-2)', lineHeight: 1.6, letterSpacing: '-0.01em', maxWidth: 480, margin: '0 auto' },
-  };
-
-  /* ─────────────────────────────────────────
-     RENDER
-  ───────────────────────────────────────── */
-  return (
-    <>
-      <div id="su-progress" />
-
-      {/* ── LOADER ── */}
-      <div id="su-loader" ref={loaderRef}>
-        <svg width="44" height="44" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ marginBottom: 4 }}>
-          <defs>
-            <linearGradient id="lgA" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#4A6FA5" />
-              <stop offset="50%" stopColor="#6B5EA8" />
-              <stop offset="100%" stopColor="#8B7BC8" />
-            </linearGradient>
-            <linearGradient id="lgB" x1="100%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#2D4F8A" />
-              <stop offset="100%" stopColor="#5A4A9E" />
-            </linearGradient>
-          </defs>
-          <ellipse cx="38" cy="42" rx="24" ry="11" transform="rotate(-35 38 42)"
-            fill="none" stroke="url(#lgA)" strokeWidth="9" strokeLinecap="round" opacity="0.95" />
-          <ellipse cx="62" cy="58" rx="24" ry="11" transform="rotate(-35 62 58)"
-            fill="none" stroke="url(#lgB)" strokeWidth="9" strokeLinecap="round" opacity="0.90" />
-          <ellipse cx="50" cy="50" rx="18" ry="8" transform="rotate(55 50 50)"
-            fill="none" stroke="url(#lgA)" strokeWidth="6.5" strokeLinecap="round" opacity="0.75" />
-        </svg>
-        <span className="l-mark">SYNCUP</span>
-        <span className="l-sub">Workspace</span>
-        <div className="l-track"><div className="l-fill" /></div>
-      </div>
-
-      <div ref={mainRef}>
-
-        {/* ══════════════════════════════════════
-            iOS LIQUID GLASS NAVBAR
-        ══════════════════════════════════════ */}
-        <nav className="navbar-pill">
-          {/* ── Logo — SVG recreation of the SyncUp infinity-link mark ── */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-            {/* SVG logo mark: two interlocked ovals forming the S/∞ shape */}
-            <svg width="32" height="32" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
-              <defs>
-                <linearGradient id="gA" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#4A6FA5" />
-                  <stop offset="50%" stopColor="#6B5EA8" />
-                  <stop offset="100%" stopColor="#8B7BC8" />
-                </linearGradient>
-                <linearGradient id="gB" x1="100%" y1="0%" x2="0%" y2="100%">
-                  <stop offset="0%" stopColor="#2D4F8A" />
-                  <stop offset="100%" stopColor="#5A4A9E" />
-                </linearGradient>
-                <filter id="glow">
-                  <feGaussianBlur stdDeviation="2" result="blur" />
-                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+function GlassFilter() {
+    return (
+        <svg style={{ display: "none" }}>
+            <defs>
+                <filter id="glass-distortion" x="0%" y="0%" width="100%" height="100%" filterUnits="objectBoundingBox">
+                    <feTurbulence type="fractalNoise" baseFrequency="0.001 0.005" numOctaves="1" seed="17" result="turbulence" />
+                    <feComponentTransfer in="turbulence" result="mapped"><feFuncR type="gamma" amplitude="1" exponent="10" offset="0.5" /><feFuncG type="gamma" amplitude="0" exponent="1" offset="0" /><feFuncB type="gamma" amplitude="0" exponent="1" offset="0.5" /></feComponentTransfer>
+                    <feGaussianBlur in="turbulence" stdDeviation="3" result="softMap" />
+                    <feSpecularLighting in="softMap" surfaceScale="5" specularConstant="1" specularExponent="100" lightingColor="white" result="specLight"><fePointLight x="-200" y="-200" z="300" /></feSpecularLighting>
+                    <feComposite in="specLight" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="litImage" />
+                    <feDisplacementMap in="SourceGraphic" in2="softMap" scale="200" xChannelSelector="R" yChannelSelector="G" />
                 </filter>
-              </defs>
-              {/* Outer oval — top-left, tilted ~-30deg */}
-              <ellipse cx="38" cy="42" rx="24" ry="11" transform="rotate(-35 38 42)"
-                fill="none" stroke="url(#gA)" strokeWidth="9" strokeLinecap="round" opacity="0.95" filter="url(#glow)" />
-              {/* Outer oval — bottom-right, tilted ~+30deg */}
-              <ellipse cx="62" cy="58" rx="24" ry="11" transform="rotate(-35 62 58)"
-                fill="none" stroke="url(#gB)" strokeWidth="9" strokeLinecap="round" opacity="0.90" />
-              {/* Inner crossing oval — gives the link/chain illusion */}
-              <ellipse cx="50" cy="50" rx="18" ry="8" transform="rotate(55 50 50)"
-                fill="none" stroke="url(#gA)" strokeWidth="6.5" strokeLinecap="round" opacity="0.75" />
-            </svg>
-            <span className="nav-logo-text display" style={{ fontWeight: 700, fontSize: 18, letterSpacing: '-0.03em', color: 'var(--text-1)', lineHeight: 1 }}>
-              SyncUp
-            </span>
-          </div>
+            </defs>
+        </svg>
+    );
+}
 
-          {/* Nav links — Features · Enterprise · How it works */}
-          <div style={{ display: 'flex', gap: 28 }}>
-            {[
-              ['Features', '#su-features'],
-              ['Enterprise', '#su-stats'],
-              ['How it works', '#su-how'],
-            ].map(([l, h]) => (
-              <a key={l} href={h} className="nav-link">{l}</a>
-            ))}
-          </div>
+function Logo({ size = 28, id = "logo" }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
+            <defs><linearGradient id={id} x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#76ABAE" /><stop offset="100%" stopColor="#9ECDD0" /></linearGradient></defs>
+            <ellipse cx="38" cy="42" rx="24" ry="11" transform="rotate(-35 38 42)" fill="none" stroke={`url(#${id})`} strokeWidth="9" strokeLinecap="round" opacity=".95" />
+            <ellipse cx="62" cy="58" rx="24" ry="11" transform="rotate(-35 62 58)" fill="none" stroke={`url(#${id})`} strokeWidth="9" strokeLinecap="round" opacity=".8" />
+            <ellipse cx="50" cy="50" rx="18" ry="8" transform="rotate(55 50 50)" fill="none" stroke={`url(#${id})`} strokeWidth="6.5" strokeLinecap="round" opacity=".6" />
+        </svg>
+    );
+}
 
-          {/* Actions */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button onClick={() => navigate('/login')} className="btn btn-s"
-              style={{ padding: '8px 16px', borderRadius: 99, fontSize: 13, fontWeight: 500, letterSpacing: '-0.01em' }}>
-              Login
-            </button>
-            <button onClick={() => navigate('/register')} className="btn btn-p"
-              style={{ padding: '8px 16px', borderRadius: 99, fontSize: 13, fontWeight: 600, letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: 5 }}>
-              Get Started <ArrowRight size={12} />
-            </button>
+function ShaderAnimation() {
+    const containerRef = useRef(null), sceneRef = useRef(null);
+    useEffect(() => {
+        const container = containerRef.current; if (!container) return;
+        const camera = new THREE.Camera(); camera.position.z = 1;
+        const scene = new THREE.Scene(), geometry = new THREE.PlaneGeometry(2, 2);
+        const uniforms = { time: { value: 1.0 }, resolution: { value: new THREE.Vector2() } };
+        const material = new THREE.ShaderMaterial({ uniforms, vertexShader: `void main() { gl_Position = vec4(position, 1.0); }`, fragmentShader: `precision highp float; uniform vec2 resolution; uniform float time; void main(void) { vec2 uv = (gl_FragCoord.xy * 2.0 - resolution.xy) / min(resolution.x, resolution.y); float t = time * 0.05; float lineWidth = 0.002; vec3 color = vec3(0.0); for(int j = 0; j < 3; j++){ for(int i = 0; i < 5; i++){ color[j] += lineWidth * float(i*i) / abs(fract(t - 0.01*float(j) + float(i)*0.01)*5.0 - length(uv) + mod(uv.x + uv.y, 0.2)); } } gl_FragColor = vec4(color[0]*0.47, color[1]*0.67, color[2]*0.68, 1.0); }` });
+        scene.add(new THREE.Mesh(geometry, material));
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        Object.assign(renderer.domElement.style, { display: "block", width: "100%", height: "100%", position: "absolute", top: "0", left: "0" });
+        container.appendChild(renderer.domElement);
+        const resize = () => { const w = container.clientWidth, h = container.clientHeight; renderer.setSize(w, h); uniforms.resolution.value.x = renderer.domElement.width; uniforms.resolution.value.y = renderer.domElement.height; };
+        resize(); window.addEventListener("resize", resize, { passive: true });
+        sceneRef.current = { animId: 0 };
+        const animate = () => { sceneRef.current.animId = requestAnimationFrame(animate); uniforms.time.value += 0.05; renderer.render(scene, camera); };
+        animate();
+        return () => { window.removeEventListener("resize", resize); cancelAnimationFrame(sceneRef.current?.animId); if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement); renderer.dispose(); geometry.dispose(); material.dispose(); };
+    }, []);
+    return <div ref={containerRef} style={{ width: "100%", height: "100%", overflow: "hidden", position: "relative" }} />;
+}
+
+function ZoomParallax({ images }) {
+    const outerRef = useRef(null), layerRefs = useRef([]), rafRef = useRef(null);
+    const SCALES = [4, 5, 6, 5, 6, 8, 9];
+    const OFFSETS = [{}, { top: "-30vh", left: "5vw", height: "30vh", width: "35vw" }, { top: "-10vh", left: "-25vw", height: "45vh", width: "20vw" }, { top: "0", left: "27.5vw", height: "25vh", width: "25vw" }, { top: "27.5vh", left: "5vw", height: "25vh", width: "20vw" }, { top: "27.5vh", left: "-22.5vw", height: "25vh", width: "30vw" }, { top: "22.5vh", left: "25vw", height: "15vh", width: "15vw" }];
+    useEffect(() => {
+        const outer = outerRef.current; if (!outer) return;
+        const tick = () => { const rect = outer.getBoundingClientRect(), progress = Math.max(0, Math.min(1, -rect.top / (outer.offsetHeight - window.innerHeight))); layerRefs.current.forEach((layer, i) => { if (layer) layer.style.transform = `scale(${1 + progress * (SCALES[i % SCALES.length] - 1)})`; }); rafRef.current = requestAnimationFrame(tick); };
+        rafRef.current = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(rafRef.current);
+    }, []);
+    return (
+        <div ref={outerRef} style={{ position: "relative", height: "300vh" }}>
+            <div style={{ position: "sticky", top: 0, height: "100vh", overflow: "hidden" }}>
+                {images.map((img, i) => {
+                    const off = OFFSETS[i] || {};
+                    return (
+                        <div key={i} ref={el => layerRefs.current[i] = el} style={{ position: "absolute", top: 0, left: 0, display: "flex", height: "100%", width: "100%", alignItems: "center", justifyContent: "center", transformOrigin: "center center", willChange: "transform" }}>
+                            <div style={{ position: "relative", height: off.height || "25vh", width: off.width || "25vw", top: off.top || "0", left: off.left || "0", overflow: "hidden", borderRadius: "8px", boxShadow: "0 8px 32px rgba(0,0,0,0.10)", border: "1px solid rgba(118,171,174,0.20)" }}>
+                                <img src={img.src} alt={img.label} style={{ height: "100%", width: "100%", objectFit: "cover", display: "block" }} />
+                                <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "linear-gradient(0deg, rgba(26,32,37,0.78), transparent)", padding: "12px 14px 10px", fontFamily: "var(--fb)", fontSize: "10px", fontWeight: 600, letterSpacing: ".12em", color: "var(--accent2)", textTransform: "uppercase" }}>{img.label}</div>
+                            </div>
+                        </div>
+                    );
+                })}
+                <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 10, pointerEvents: "none", textAlign: "center" }}>
+                    <span style={{ fontFamily: "var(--fb)", fontSize: "10px", fontWeight: 700, letterSpacing: ".3em", textTransform: "uppercase", color: "var(--accent)", marginBottom: 14 }}>Real Teams · Real Results</span>
+                    <h2 style={{ fontFamily: "var(--fd)", fontSize: "clamp(2.4rem,6vw,5rem)", fontWeight: 400, letterSpacing: "-0.025em", lineHeight: 1.05, color: "var(--t1)", maxWidth: 700, textShadow: "0 2px 24px rgba(240,242,245,0.7)" }}>Where great work<br /><em style={{ fontStyle: "italic", color: "var(--accent)" }}>happens together</em></h2>
+                </div>
+                <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(ellipse 70% 70% at center, transparent 20%, rgba(240,242,245,0.55) 100%)" }} />
+            </div>
+        </div>
+    );
+}
+
+function FeaturesSection() {
+    const sectionRef = useRef(null);
+    const [visibleCards, setVisibleCards] = useState(new Set());
+    const [headingVisible, setHeadingVisible] = useState(false);
+    const [panelVisible, setPanelVisible] = useState(false);
+    useEffect(() => {
+        const el = sectionRef.current; if (!el) return;
+        const headObs = new IntersectionObserver(([e]) => { if (e.isIntersecting) { setHeadingVisible(true); setPanelVisible(true); headObs.disconnect(); } }, { threshold: 0.05 });
+        headObs.observe(el);
+        const cardObs = new IntersectionObserver((entries) => { entries.forEach(e => { if (e.isIntersecting) { setVisibleCards(prev => new Set([...prev, parseInt(e.target.dataset.cardIdx)])); cardObs.unobserve(e.target); } }); }, { threshold: 0.1, rootMargin: "0px 0px -20px 0px" });
+        const t = setTimeout(() => { el.querySelectorAll("[data-card-idx]").forEach(c => cardObs.observe(c)); }, 50);
+        return () => { headObs.disconnect(); cardObs.disconnect(); clearTimeout(t); };
+    }, []);
+    return (
+        <section className="section" id="features" ref={sectionRef} style={{ position: "relative", background: "var(--bg)" }}>
+            <div className="blob" style={{ width: 500, height: 500, background: "radial-gradient(circle,rgba(118,171,174,0.08) 0%,transparent 70%)", top: -100, left: -100 }} />
+            <div className="container" style={{ position: "relative", zIndex: 1 }}>
+                <div style={{ textAlign: "center" }}>
+                    <span className={`section-label s-reveal${headingVisible ? " in" : ""}`}>Platform</span>
+                    <h2 className={`section-h s-reveal${headingVisible ? " in" : ""}`} style={{ transitionDelay: "0.12s" }}>Everything your <em>team needs</em></h2>
+                    <p className={`s-reveal${headingVisible ? " in" : ""}`} style={{ fontSize: 16, color: "var(--t2)", maxWidth: 480, margin: "0 auto", lineHeight: 1.65, transitionDelay: "0.22s" }}>Six core capabilities designed to eliminate friction and amplify your team's velocity.</p>
+                </div>
+                <div className="features-split-layout">
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+                        {FEATURES.map((f, i) => (<div key={i} data-card-idx={i}><ParallaxFeatureCard feature={f} index={i} isVisible={visibleCards.has(i)} /></div>))}
+                    </div>
+                    <div className="features-right-col" style={{ opacity: panelVisible ? 1 : 0, transform: panelVisible ? 'translateX(0)' : 'translateX(40px)', transition: 'opacity .9s cubic-bezier(.22,1,.36,1) .4s, transform .9s cubic-bezier(.22,1,.36,1) .4s' }}>
+                        <SplineScene3D />
+                    </div>
+                </div>
+            </div>
+        </section>
+    );
+}
+
+function LiquidGlassNavbar({ navbarRef, onNavClick }) {
+    return (
+        <div className="lg-navbar" ref={navbarRef}>
+            <div className="glass-effect-wrapper lg-navbar-pill">
+                <div className="glass-blur-layer" /><div className="glass-white-layer" /><div className="glass-shine-layer" />
+                <div className="glass-content" style={{ display: "flex", alignItems: "center", width: "100%" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: 28, flexShrink: 0 }}><Logo size={26} id="lg-nav-logo" /><span style={{ fontFamily: "var(--fd)", fontSize: 19, color: "var(--t1)" }}>SyncUp</span></div>
+                    <div style={{ display: "flex", gap: 24, flex: 1 }}>{[["Features", "features"], ["Stats", "stats"], ["Pricing", "pricing"]].map(([label, id]) => (<button key={label} className="lg-nav-link" style={{ padding: 0 }} onClick={() => onNavClick(id)}>{label}</button>))}</div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", marginLeft: 8, flexShrink: 0 }}>
+                        <Link to="/login" className="btn btn-s" style={{ fontSize: 13, padding: "7px 16px", textDecoration: "none" }}>Login</Link>
+                        <Link to="/register" className="btn btn-p" style={{ fontSize: 13, padding: "7px 16px", textDecoration: "none" }}>Get Started <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7" /></svg></Link>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export default function LandingPage() {
+    const cursorRef = useRef(null), cursorPos = useRef({ x: -100, y: -100 }), cursorTarget = useRef({ x: -100, y: -100 }), cursorRaf = useRef(null), navbarRef = useRef(null), progRef = useRef(null), obsRef = useRef(null), statCounterObsRef = useRef(null), countersStarted = useRef(false);
+    const [darkMode, setDarkMode] = useState(false);
+
+    useEffect(() => {
+        const mq = window.matchMedia('(prefers-color-scheme: dark)');
+        setDarkMode(mq.matches);
+        const h = e => setDarkMode(e.matches);
+        mq.addEventListener('change', h);
+        return () => mq.removeEventListener('change', h);
+    }, []);
+
+    useEffect(() => {
+        if (darkMode) document.documentElement.classList.add('dark');
+        else document.documentElement.classList.remove('dark');
+    }, [darkMode]);
+
+    useEffect(() => {
+        const el = document.createElement("style"); el.id = "su-lp-styles"; el.textContent = GLOBAL_CSS;
+        if (!document.getElementById("su-lp-styles")) document.head.appendChild(el);
+        return () => document.getElementById("su-lp-styles")?.remove();
+    }, []);
+
+    const showNavbar = useCallback(() => {
+        const nav = navbarRef.current; if (!nav) return;
+        nav.classList.add("visible");
+        requestAnimationFrame(() => { nav.style.transform = "translateX(-50%) translateY(0)"; nav.style.opacity = "1"; });
+        triggerRevealAnimations();
+    }, []);
+
+    useEffect(() => {
+        const cursor = cursorRef.current; if (!cursor) return;
+        const onMove = e => { cursorTarget.current = { x: e.clientX, y: e.clientY }; };
+        const onOver = e => { if (e.target.closest("a,button,.btn,.lg-nav-link")) cursor.classList.add("big"); };
+        const onOut = e => { if (e.target.closest("a,button,.btn,.lg-nav-link")) cursor.classList.remove("big"); };
+        window.addEventListener("mousemove", onMove, { passive: true }); document.addEventListener("mouseover", onOver, { passive: true }); document.addEventListener("mouseout", onOut, { passive: true });
+        const loop = () => { const c = cursorPos.current, t = cursorTarget.current; c.x += (t.x - c.x) * 0.13; c.y += (t.y - c.y) * 0.13; cursor.style.left = c.x + "px"; cursor.style.top = c.y + "px"; cursorRaf.current = requestAnimationFrame(loop); };
+        cursorRaf.current = requestAnimationFrame(loop);
+        return () => { cancelAnimationFrame(cursorRaf.current); window.removeEventListener("mousemove", onMove); document.removeEventListener("mouseover", onOver); document.removeEventListener("mouseout", onOut); };
+    }, []);
+
+    useEffect(() => {
+        const h = e => { const btn = e.target.closest(".btn"); if (!btn) return; const r = document.createElement("span"); r.className = "ripple"; const rect = btn.getBoundingClientRect(), sz = Math.max(rect.width, rect.height); Object.assign(r.style, { width: sz + "px", height: sz + "px", left: e.clientX - rect.left - sz / 2 + "px", top: e.clientY - rect.top - sz / 2 + "px" }); btn.appendChild(r); setTimeout(() => r.remove(), 750); };
+        document.addEventListener("click", h, { passive: true }); return () => document.removeEventListener("click", h);
+    }, []);
+
+    useEffect(() => {
+        const onScroll = () => { const nav = navbarRef.current; if (nav) nav.classList.toggle("compact", window.scrollY > 60); const prog = progRef.current; if (prog) { const d = document.documentElement; prog.style.width = Math.min(d.scrollTop / (d.scrollHeight - d.clientHeight) * 100, 100) + "%"; } };
+        window.addEventListener("scroll", onScroll, { passive: true }); return () => window.removeEventListener("scroll", onScroll);
+    }, []);
+
+    const triggerRevealAnimations = () => {
+        if (obsRef.current) obsRef.current.disconnect();
+        obsRef.current = new IntersectionObserver(entries => { entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add("in"); obsRef.current?.unobserve(e.target); } }); }, { threshold: 0.12 });
+        setTimeout(() => { document.querySelectorAll(".s-reveal,.card-reveal,.scale-reveal").forEach(el => obsRef.current?.observe(el)); startCounters(); }, 200);
+    };
+
+    const startCounters = () => {
+        if (countersStarted.current) return; countersStarted.current = true;
+        if (statCounterObsRef.current) statCounterObsRef.current.disconnect();
+        statCounterObsRef.current = new IntersectionObserver(entries => {
+            entries.forEach(e => { if (!e.isIntersecting) return; const i = parseInt(e.target.dataset.idx), s = STATS[i], el = document.getElementById(`sv-${i}`); if (!el) return; let start = null; const step = ts => { if (!start) start = ts; const p = Math.min((ts - start) / 2400, 1), ease = 1 - Math.pow(1 - p, 3); el.textContent = (ease * s.val).toFixed(s.dec) + s.suf; if (p < 1) requestAnimationFrame(step); }; requestAnimationFrame(step); statCounterObsRef.current?.unobserve(e.target); });
+        }, { threshold: 0.5 });
+        STATS.forEach((_, i) => { const el = document.getElementById(`sc-${i}`); if (el) { el.dataset.idx = i; statCounterObsRef.current?.observe(el); } });
+    };
+
+    useEffect(() => () => { obsRef.current?.disconnect(); statCounterObsRef.current?.disconnect(); }, []);
+    const handleNavClick = useCallback((id) => { document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }); }, []);
+
+    return (
+        <>
+            <GlassFilter />
+            <div id="su-cursor" ref={cursorRef} />
+            <div id="su-prog" ref={progRef} />
             {/* Theme toggle */}
-            <button onClick={() => setDark(d => !d)} className="btn btn-s"
-              style={{ width: 36, height: 36, borderRadius: 99, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0 }}>
-              {dark ? <Sun size={14} color="var(--accent)" /> : <Moon size={14} color="var(--accent)" />}
+            <button id="theme-toggle" onClick={() => setDarkMode(d => !d)} title="Toggle theme">
+                {darkMode ? (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5" /><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" /></svg>
+                ) : (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
+                )}
             </button>
-          </div>
-        </nav>
+            <LiquidGlassNavbar navbarRef={navbarRef} onNavClick={handleNavClick} />
+            <div className="hero-section"><ScrollMorphHero onReady={showNavbar} /></div>
 
-        <main>
-
-          {/* ══════════════════════════════════════
-              HERO
-          ══════════════════════════════════════ */}
-          <section id="su-hero" style={{ minHeight: '100vh', paddingTop: 120, paddingBottom: 80, position: 'relative', overflow: 'hidden' }}>
-            <div className="blob" style={{ width: 580, height: 580, background: 'radial-gradient(circle,rgba(118,171,174,.16) 0%,transparent 70%)', top: -80, left: -100 }} />
-            <div className="blob" style={{ width: 440, height: 440, background: 'radial-gradient(circle,rgba(168,216,218,.1) 0%,transparent 70%)', bottom: 0, right: -60 }} />
-
-            <div style={S.wrap}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 64, alignItems: 'center' }}>
-
-                {/* ── Copy ── */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 26 }}>
-                  <div className="reveal-text" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '5px 13px', borderRadius: 99, background: 'var(--accent-dim)', border: '1px solid var(--border-lit)', width: 'fit-content' }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', boxShadow: '0 0 7px var(--accent)' }} />
-                    <span style={{ fontFamily: 'var(--font-b)', fontSize: 12, fontWeight: 500, color: 'var(--accent)', letterSpacing: '.05em' }}>
-                      Now in public beta
-                    </span>
-                  </div>
-
-                  <h1 className="reveal-text display" style={{ fontSize: 'clamp(3rem,6.5vw,5.8rem)', letterSpacing: '-0.05em', lineHeight: 1.05, color: 'var(--text-1)' }}>
-                    WORK<br />
-                    <span className="grad-h">TOGETHER.</span><br />
-                    IN REAL TIME.
-                  </h1>
-
-                  <p className="reveal-text" style={{ fontFamily: 'var(--font-b)', fontSize: 17, fontWeight: 400, lineHeight: 1.65, letterSpacing: '-0.01em', color: 'var(--text-2)', maxWidth: 420 }}>
-                    A unified digital workspace built for modern teams. Channels, messages, files, and activity — all in one place.
-                  </p>
-
-                  <div className="reveal-text" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                    <button onClick={() => navigate('/register')} className="btn btn-p"
-                      style={{ padding: '12px 26px', borderRadius: 12, fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      Get Started Free <ArrowRight size={15} />
-                    </button>
-                    <button className="btn btn-s"
-                      style={{ padding: '12px 26px', borderRadius: 12, fontSize: 15 }}>
-                      Live Demo
-                    </button>
-                  </div>
-
-                  <div className="reveal-text" style={{ display: 'flex', alignItems: 'center', gap: 12, paddingTop: 4 }}>
-                    <div style={{ display: 'flex' }}>
-                      {['#76ABAE', '#A8D8DA', '#4A8B8E', '#5BA3A6'].map((c, i) => (
-                        <div key={i} style={{ width: 28, height: 28, borderRadius: '50%', background: c, border: '2px solid var(--bg-page)', marginLeft: i > 0 ? -8 : 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff' }}>
-                          {String.fromCharCode(65 + i)}
-                        </div>
-                      ))}
+            <section className="section" style={{ padding: "80px 24px 60px", textAlign: "center", borderBottom: "1px solid var(--border)", background: "var(--surface)" }}>
+                <div className="container" style={{ maxWidth: 720 }}>
+                    <p className="s-reveal" style={{ fontSize: 18, color: "var(--t2)", lineHeight: 1.7, marginBottom: 36 }}>A unified digital workspace for modern teams. Channels, messages, files, and activity — all beautifully synced in real time.</p>
+                    <div className="s-reveal" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
+                        <div style={{ display: "flex" }}>{["#76ABAE", "#9ECDD0", "#5A9396", "#4A8082"].map((c, i) => (<div key={i} style={{ width: 28, height: 28, borderRadius: "50%", background: c, border: "2px solid var(--surface)", marginLeft: i > 0 ? -9 : 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#fff" }}>{String.fromCharCode(65 + i)}</div>))}</div>
+                        <span style={{ color: "var(--accent)", fontSize: 13 }}>★★★★★</span>
+                        <span style={{ fontSize: 13, color: "var(--t3)" }}>2,000+ teams worldwide</span>
                     </div>
-                    <span style={{ fontSize: 13, color: 'var(--text-3)' }}>2,000+ teams trust SyncUp</span>
-                  </div>
                 </div>
+            </section>
 
-                {/* ── Dashboard mockup ── */}
-                <div className="hero-vis" style={{ position: 'relative' }}>
-                  <div style={{ position: 'absolute', inset: -24, background: 'radial-gradient(ellipse,rgba(118,171,174,.16) 0%,transparent 70%)', pointerEvents: 'none' }} />
-                  <div className="glass" style={{ borderRadius: 22, overflow: 'hidden', boxShadow: '0 40px 100px rgba(0,0,0,.32),0 0 0 1px var(--border-lit)' }}>
+            <FeaturesSection />
 
-                    {/* Title bar */}
-                    <div style={{ background: 'rgba(0,0,0,.32)', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)' }}>
-                      <div style={{ display: 'flex', gap: 5 }}>
-                        {['#FF5F57', '#FEBC2E', '#28C840'].map(c => <div key={c} style={{ width: 9, height: 9, borderRadius: '50%', background: c }} />)}
-                      </div>
-                      <div style={{ flex: 1, background: 'rgba(255,255,255,.05)', borderRadius: 7, padding: '3px 10px', fontSize: 11, color: 'var(--text-3)' }}>syncup.app</div>
-                      <Search size={12} color="var(--text-3)" />
+            <section className="section" id="stats" style={{ background: "var(--surface)", borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>
+                <div className="container">
+                    <div style={{ textAlign: "center" }}><h2 className="section-h s-reveal">Built for scale. <em>Designed for speed.</em></h2></div>
+                    <div className="stats-grid">{STATS.map((s, i) => (<div key={i} id={`sc-${i}`} className="glass stat-card scale-reveal" style={{ transitionDelay: `${i * 0.1}s` }}><div id={`sv-${i}`} className="stat-val">0{s.suf}</div><div className="stat-lbl">{s.label}</div></div>))}</div>
+                </div>
+            </section>
+
+            <div className="marquee-section" style={{ background: "var(--bg)" }}>
+                <div style={{ maxWidth: 1160, margin: "0 auto", padding: "0 24px 48px", textAlign: "center" }}>
+                    <span className="section-label s-reveal">Testimonials</span>
+                    <h2 className="section-h s-reveal">Loved by teams <em>worldwide</em></h2>
+                </div>
+                {[TESTIMONIALS, [...TESTIMONIALS].reverse()].map((row, ri) => (
+                    <div key={ri} className="marquee-row" style={{ marginTop: ri === 1 ? 16 : 0 }}>
+                        <div className={`marquee-inner${ri === 1 ? " rev" : ""}`}>
+                            {[...row, ...row].map((t, i) => (<div key={i} className="glass tcard"><div style={{ color: "var(--accent)", fontSize: 12 }}>★★★★★</div><p>"{t.quote}"</p><div className="tcard-author"><div className="tcard-av">{t.name[0]}</div><div><div className="tcard-name">{t.name}</div><div className="tcard-role">{t.role}</div></div></div></div>))}
+                        </div>
                     </div>
+                ))}
+            </div>
 
-                    {/* App layout */}
-                    <div style={{ display: 'flex', height: 370 }}>
-                      {/* Sidebar */}
-                      <div style={{ width: 186, background: 'rgba(118,171,174,.07)', borderRight: '1px solid var(--border)', padding: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--accent)', letterSpacing: '.14em', padding: '4px 8px', marginBottom: 6 }}>WORKSPACE</div>
-                        {['# general', '# design', '# dev-ops', '# random'].map((ch, i) => (
-                          <div key={ch} style={{ padding: '7px 10px', borderRadius: 8, background: i === 0 ? 'var(--accent-dim)' : 'transparent', color: i === 0 ? 'var(--accent)' : 'var(--text-2)', fontSize: 13, fontWeight: i === 0 ? 600 : 400 }}>
-                            {ch}
-                          </div>
+            <div style={{ borderTop: "1px solid var(--border)", background: "var(--surface)" }}>
+                <div style={{ padding: "80px 24px 40px", textAlign: "center" }}>
+                    <span className="section-label s-reveal">In Action</span>
+                    <h2 className="section-h s-reveal" style={{ maxWidth: 600, margin: "0 auto" }}>See what's possible <em>with your team</em></h2>
+                </div>
+                <ZoomParallax images={PARALLAX_IMAGES} />
+            </div>
+
+            <section className="section" id="pricing" style={{ borderTop: "1px solid var(--border)", background: "var(--bg)" }}>
+                <div className="container">
+                    <div style={{ textAlign: "center" }}>
+                        <span className="section-label s-reveal">Pricing</span>
+                        <h2 className="section-h s-reveal">Simple, transparent <em>pricing</em></h2>
+                        <p className="s-reveal" style={{ fontSize: 15, color: "var(--t2)", maxWidth: 420, margin: "0 auto" }}>No hidden fees. Upgrade or downgrade at any time.</p>
+                    </div>
+                    <div className="pricing-grid">
+                        {PRICING.map((p, i) => (
+                            <div key={i} className={`glass pricing-card card-reveal${p.featured ? " featured" : ""}`} style={{ position: "relative", transitionDelay: `${i * 0.12}s` }}>
+                                {p.featured && <span className="pricing-badge">MOST POPULAR</span>}
+                                <div className="pricing-tier">{p.tier}</div>
+                                <div style={{ display: "flex", alignItems: "baseline", marginBottom: 8 }}><span className="pricing-price">{p.price}</span><span className="pricing-period">{p.period}</span></div>
+                                <p className="pricing-desc">{p.desc}</p>
+                                <div className="pricing-features">{p.features.map(f => (<div key={f} className="feat-row"><div className="check-box"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg></div><span>{f}</span></div>))}</div>
+                                <Link to="/register" className={`btn ${p.featured ? "btn-p" : "btn-s"}`} style={{ width: "100%", padding: "12px 20px", borderRadius: 12, fontSize: 14, justifyContent: "center", textDecoration: "none" }}>{p.cta}{p.featured && <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7" /></svg>}</Link>
+                            </div>
                         ))}
-                        <div style={{ marginTop: 'auto', paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'linear-gradient(135deg,var(--accent),var(--teal-hi))', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>A</div>
-                          <div>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-1)' }}>Alex</div>
-                            <div style={{ fontSize: 10, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                              <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />Online
-                            </div>
-                          </div>
+                    </div>
+                </div>
+            </section>
+
+            <section className="shader-cta-section" style={{ borderTop: "1px solid var(--border)" }}>
+                <div className="shader-canvas-wrap"><ShaderAnimation /></div>
+                <div className="shader-cta-content" style={{ textAlign: "center" }}>
+                    <div style={{ maxWidth: 700, margin: "0 auto" }}>
+                        <span className="section-label" style={{ display: "block", marginBottom: 20 }}>Get Started Today</span>
+                        <h2 className="section-h" style={{ fontSize: "clamp(2.6rem,6vw,4.4rem)", marginBottom: 22 }}>Ready to transform<br /><em>how your team works?</em></h2>
+                        <p style={{ fontSize: 17, color: "var(--t2)", maxWidth: 460, margin: "0 auto 48px", lineHeight: 1.7 }}>Join 2,000+ teams already on SyncUp. Free forever for small teams — no credit card required.</p>
+                        <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap", marginBottom: 48 }}>
+                            <Link to="/register" className="btn btn-p" style={{ padding: "15px 36px", borderRadius: 13, fontSize: 16, boxShadow: "0 0 36px rgba(118,171,174,0.35)", textDecoration: "none" }}>Start for free <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M5 12h14M12 5l7 7-7 7" /></svg></Link>
+                            <button className="btn btn-s" style={{ padding: "15px 36px", borderRadius: 13, fontSize: 16, backdropFilter: "blur(12px)" }}>Book a demo</button>
                         </div>
-                      </div>
-
-                      {/* Chat pane */}
-                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                            <Hash size={13} color="var(--accent)" />
-                            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>general</span>
-                          </div>
-                          <div style={{ display: 'flex', gap: 11 }}>
-                            <Bell size={13} color="var(--text-3)" />
-                            <MoreHorizontal size={13} color="var(--text-3)" />
-                          </div>
+                        <div style={{ display: "flex", gap: 32, justifyContent: "center", flexWrap: "wrap" }}>
+                            {["No credit card required", "Free forever plan", "Setup in 2 minutes"].map(t => (<div key={t} style={{ display: "flex", alignItems: "center", gap: 7 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg><span style={{ fontSize: 13, color: "var(--t2)" }}>{t}</span></div>))}
                         </div>
-                        <div style={{ flex: 1, padding: 14, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
-                          {[
-                            { n: 'Jordan', c: 'var(--accent)', msg: '🚀 Just pushed the new design system!', t: '10:24 AM' },
-                            { n: 'Sam', c: 'var(--teal-hi)', msg: 'Looks incredible — ship it 🔥', t: '10:25 AM' },
-                            { n: 'Alex', c: 'var(--accent)', msg: 'Staging is clean. Deploying now.', t: '10:26 AM' },
-                          ].map(m => (
-                            <div key={m.n} style={{ display: 'flex', gap: 9 }}>
-                              <div style={{ width: 27, height: 27, borderRadius: 8, background: m.c, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff' }}>{m.n[0]}</div>
-                              <div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 3 }}>
-                                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-1)' }}>{m.n}</span>
-                                  <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{m.t}</span>
-                                </div>
-                                <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.5 }}>{m.msg}</div>
-                              </div>
-                            </div>
-                          ))}
+                    </div>
+                </div>
+            </section>
+
+            <footer>
+                <div className="container">
+                    <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 48, marginBottom: 48 }}>
+                        <div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 16 }}><Logo size={24} id="ft-logo-g" /><span style={{ fontFamily: "var(--fd)", fontSize: 18, color: "var(--t1)" }}>SyncUp</span></div>
+                            <p style={{ fontSize: 13, color: "var(--t3)", lineHeight: 1.75, maxWidth: 200 }}>Real-time collaboration for modern, fast-moving teams.</p>
                         </div>
-                        <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border)' }}>
-                          <div style={{ background: 'rgba(255,255,255,.04)', borderRadius: 9, padding: '7px 11px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 12, color: 'var(--text-3)', flex: 1 }}>Message #general…</span>
-                            <Paperclip size={12} color="var(--text-3)" />
-                            <Smile size={12} color="var(--text-3)" />
-                            <Send size={12} color="var(--accent)" />
-                          </div>
-                        </div>
-                      </div>
+                        {[{ head: "Product", items: ["Features", "Pricing", "Security", "Changelog", "API"] }, { head: "Company", items: ["About", "Blog", "Careers", "Press", "Contact"] }, { head: "Legal", items: ["Privacy", "Terms", "Cookies", "DPA", "Security"] }].map(col => (
+                            <div key={col.head}><h4 style={{ fontFamily: "var(--fb)", fontSize: 11, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: 'var(--t1)', marginBottom: 16 }}>{col.head}</h4><ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>{col.items.map(item => <li key={item}><a href="#" style={{ fontSize: 13, color: 'var(--t3)', textDecoration: 'none' }}>{item}</a></li>)}</ul></div>
+                        ))}
                     </div>
-                  </div>
+                    <div className="footer-bottom"><span>© 2025 SyncUp Workspace, Inc.</span><span>Crafted with precision ◈</span></div>
                 </div>
-
-              </div>
-            </div>
-          </section>
-
-          {/* ══════════════════════════════════════
-              FEATURES
-          ══════════════════════════════════════ */}
-          <section id="su-features" ref={featRef} className="section-entry" style={{ padding: '120px 24px' }}>
-            <div style={S.wrap}>
-              <div style={{ textAlign: 'center', marginBottom: 68 }}>
-                <p className="reveal-text" style={S.sLabel}>Platform</p>
-                <h2 className="reveal-text display" style={{ fontWeight: 800, fontSize: 'clamp(2rem,5vw,3.5rem)', letterSpacing: '-0.05em', color: 'var(--text-1)', lineHeight: 1.1, textAlign: 'center', marginBottom: 18 }}>
-                  Everything your team needs
-                </h2>
-                <p className="reveal-text" style={{ ...S.body, textAlign: 'center', marginTop: 0 }}>
-                  Six core capabilities designed to eliminate friction and amplify your team's velocity.
-                </p>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 18 }}>
-                {FEATURES.map((f, i) => (
-                  <div key={i} className="glass shimmer feat-card" style={{ padding: 26, borderRadius: 18 }}>
-                    <div className="icon-float" style={{ width: 46, height: 46, borderRadius: 13, background: 'var(--accent-dim)', border: '1px solid var(--border-lit)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18 }}>
-                      <f.Icon size={21} color="var(--accent)" />
-                    </div>
-                    <h3 style={{ fontFamily: 'var(--font-d)', fontWeight: 800, fontSize: 16, letterSpacing: '-0.04em', lineHeight: 1.2, color: 'var(--text-1)', marginBottom: 9 }}>{f.title}</h3>
-                    <p style={{ fontSize: 13, lineHeight: 1.65, color: 'var(--text-2)' }}>{f.desc}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* ══════════════════════════════════════
-              STATS
-          ══════════════════════════════════════ */}
-          <section id="su-stats" ref={statsRef} className="section-entry" style={{ padding: '100px 24px', background: 'linear-gradient(180deg,transparent,rgba(118,171,174,.04),transparent)' }}>
-            <div style={S.wrap}>
-              <div style={{ textAlign: 'center', marginBottom: 60 }}>
-                <h2 className="reveal-text display" style={{ fontWeight: 800, fontSize: 'clamp(1.9rem,4.5vw,3.2rem)', letterSpacing: '-0.05em', lineHeight: 1.1, color: 'var(--text-1)', textAlign: 'center' }}>
-                  Built for scale. Designed for speed.
-                </h2>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 20 }}>
-                {STATS.map((s, i) => (
-                  <div key={i} className="glass" style={{ padding: 30, borderRadius: 18, textAlign: 'center' }}>
-                    <div id={`ctr-${i}`} className="cval" style={{ marginBottom: 7 }}>0{s.suffix}</div>
-                    <div style={{ fontSize: 13, color: 'var(--text-2)' }}>{s.label}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* ══════════════════════════════════════
-              PINNED SHOWCASE
-          ══════════════════════════════════════ */}
-          <div ref={pinRef} style={{ position: 'relative', background: 'var(--bg-surface)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
-            <div style={{ ...S.wrap, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 72, alignItems: 'center', minHeight: '100vh', padding: '80px 24px' }}>
-
-              <div>
-                <p style={{ ...S.sLabel }}>Live Experience</p>
-                <h2 className="display" style={{ fontWeight: 800, fontSize: 'clamp(2rem,4.5vw,3.2rem)', letterSpacing: '-0.05em', lineHeight: 1.08, color: 'var(--text-1)', marginBottom: 22, maxWidth: 400 }}>
-                  Watch your team<br />
-                  <span style={{ color: 'var(--accent)' }}>come alive.</span>
-                </h2>
-                <p style={{ fontFamily: 'var(--font-b)', fontSize: 15, fontWeight: 400, letterSpacing: '-0.01em', lineHeight: 1.65, color: 'var(--text-2)', marginBottom: 30, maxWidth: 400 }}>
-                  Every message, file, and update syncs across your team the instant it happens.
-                </p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
-                  {['Sub-100 ms message delivery', 'Live typing indicators', 'Instant file previews', 'Presence & status sync'].map(item => (
-                    <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-                      <div style={{ width: 19, height: 19, borderRadius: 6, background: 'var(--accent-dim)', border: '1px solid var(--border-lit)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <Check size={10} color="var(--accent)" />
-                      </div>
-                      <span style={{ fontSize: 14, color: 'var(--text-2)' }}>{item}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Chat feed */}
-              <div className="glass" style={{ borderRadius: 22, overflow: 'hidden', boxShadow: '0 32px 80px rgba(0,0,0,.22)' }}>
-                <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 9 }}>
-                  <Hash size={13} color="var(--accent)" />
-                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-1)' }}>general</span>
-                  <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />
-                    24 online
-                  </span>
-                </div>
-                <div style={{ padding: '18px', display: 'flex', flexDirection: 'column', gap: 15, minHeight: 360 }}>
-                  {[
-                    { n: 'Jordan', msg: '🚀 Just deployed v2.4 to production!', file: null },
-                    { n: 'Sam', msg: 'Checking metrics — looks great!', file: null },
-                    { n: 'Alex', msg: null, file: 'Q4-Report.pdf' },
-                    { n: 'Jordan', msg: 'We just hit 10k users 🎉', file: null },
-                    { n: 'Sam', msg: 'The team absolutely crushed it 💪', file: null },
-                  ].map((m, i) => (
-                    <div key={i} className="cbub" style={{ display: 'flex', gap: 9 }}>
-                      <div style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--accent)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff' }}>{m.n[0]}</div>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--accent)' }}>{m.n}</span>
-                          <span style={{ fontSize: 10, color: 'var(--text-3)' }}>just now</span>
-                        </div>
-                        {m.msg && <div style={{ fontSize: 13, color: 'var(--text-1)', lineHeight: 1.5 }}>{m.msg}</div>}
-                        {m.file && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 11px', background: 'var(--accent-dim)', borderRadius: 9, border: '1px solid var(--border-lit)', marginTop: 4 }}>
-                            <FolderOpen size={13} color="var(--accent)" />
-                            <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{m.file}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* ══════════════════════════════════════
-              HOW IT WORKS
-          ══════════════════════════════════════ */}
-          <section id="su-how" ref={howRef} className="section-entry" style={{ padding: '120px 24px' }}>
-            <div style={S.wrap}>
-              <div style={{ textAlign: 'center', marginBottom: 76 }}>
-                <p className="reveal-text" style={S.sLabel}>How it works</p>
-                <h2 className="reveal-text display" style={{ fontWeight: 800, fontSize: 'clamp(2rem,5vw,3.4rem)', letterSpacing: '-0.05em', lineHeight: 1.1, color: 'var(--text-1)', textAlign: 'center' }}>
-                  Up and running in minutes
-                </h2>
-              </div>
-              <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
-                <div className="hw-line" style={{ position: 'absolute', left: 37, top: 34, bottom: 34, width: 1, background: 'linear-gradient(180deg,var(--accent),var(--teal-hi))' }} />
-                {HOW.map((step, i) => (
-                  <div key={i} className="hw-step" style={{ display: 'flex', gap: 28, padding: '30px 0', borderBottom: i < HOW.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                    <div style={{ width: 76, flexShrink: 0, display: 'flex', justifyContent: 'center', paddingTop: 2 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--accent-dim)', border: '1px solid var(--border-lit)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-d)', fontWeight: 800, fontSize: 13, letterSpacing: '-0.03em', color: 'var(--accent)', position: 'relative', zIndex: 1 }}>
-                        {step.n}
-                      </div>
-                    </div>
-                    <div style={{ paddingTop: 4 }}>
-                      <h3 style={{ fontFamily: 'var(--font-d)', fontWeight: 800, fontSize: 20, letterSpacing: '-0.05em', lineHeight: 1.1, color: 'var(--text-1)', marginBottom: 10 }}>{step.title}</h3>
-                      <p style={{ fontFamily: 'var(--font-b)', fontSize: 15, fontWeight: 400, letterSpacing: '-0.01em', lineHeight: 1.65, color: 'var(--text-2)', maxWidth: 500 }}>{step.body}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* ══════════════════════════════════════
-              CTA
-          ══════════════════════════════════════ */}
-          <section style={{ padding: '80px 24px 120px' }}>
-            <div style={{ maxWidth: 880, margin: '0 auto' }} ref={ctaRef}>
-              <div style={{ borderRadius: 26, background: 'linear-gradient(135deg,rgba(118,171,174,.12) 0%,rgba(168,216,218,.06) 100%)', border: '1px solid var(--border-lit)', padding: '76px 56px', textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
-                {/* Dot-grid */}
-                <div style={{ position: 'absolute', inset: 0, backgroundImage: 'radial-gradient(circle,rgba(118,171,174,.15) 1px,transparent 1px)', backgroundSize: '30px 30px', pointerEvents: 'none', opacity: .5 }} />
-                <div style={{ position: 'relative' }}>
-                  <h2 className="display" style={{ fontWeight: 800, fontSize: 'clamp(2.2rem,5.5vw,3.8rem)', letterSpacing: '-0.05em', lineHeight: 1.05, color: 'var(--text-1)', marginBottom: 18 }}>
-                    Ready to transform<br />how your team works?
-                  </h2>
-                  <p style={{ fontFamily: 'var(--font-b)', fontSize: 16, fontWeight: 400, letterSpacing: '-0.01em', lineHeight: 1.65, color: 'var(--text-2)', maxWidth: 440, margin: '0 auto 38px' }}>
-                    Join 2,000+ teams already on SyncUp. Free forever for small teams.
-                  </p>
-                  <div style={{ display: 'flex', gap: 11, justifyContent: 'center', flexWrap: 'wrap' }}>
-                    <button onClick={() => navigate('/register')} className="btn btn-p"
-                      style={{ padding: '13px 30px', borderRadius: 12, fontSize: 15, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      Start for free <ArrowRight size={15} />
-                    </button>
-                    <button className="btn btn-s"
-                      style={{ padding: '13px 30px', borderRadius: 12, fontSize: 15 }}>
-                      Book a demo
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-        </main>
-
-        {/* ══════════════════════════════════════
-            FOOTER
-        ══════════════════════════════════════ */}
-        <footer style={{ borderTop: '1px solid var(--border)', padding: '56px 24px 40px' }}>
-          <div style={S.wrap}>
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: 48, marginBottom: 44 }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 14 }}>
-                  <svg width="28" height="28" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
-                    <defs>
-                      <linearGradient id="ftA" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#4A6FA5" />
-                        <stop offset="100%" stopColor="#8B7BC8" />
-                      </linearGradient>
-                      <linearGradient id="ftB" x1="100%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="#2D4F8A" />
-                        <stop offset="100%" stopColor="#5A4A9E" />
-                      </linearGradient>
-                    </defs>
-                    <ellipse cx="38" cy="42" rx="24" ry="11" transform="rotate(-35 38 42)" fill="none" stroke="url(#ftA)" strokeWidth="9" strokeLinecap="round" opacity="0.95" />
-                    <ellipse cx="62" cy="58" rx="24" ry="11" transform="rotate(-35 62 58)" fill="none" stroke="url(#ftB)" strokeWidth="9" strokeLinecap="round" opacity="0.90" />
-                    <ellipse cx="50" cy="50" rx="18" ry="8" transform="rotate(55 50 50)" fill="none" stroke="url(#ftA)" strokeWidth="6.5" strokeLinecap="round" opacity="0.75" />
-                  </svg>
-                  <span style={{ fontFamily: 'var(--font-d)', fontWeight: 700, fontSize: 17, letterSpacing: '-0.04em', color: 'var(--text-1)' }}>SyncUp</span>
-                </div>
-                <p style={{ fontSize: 13, color: 'var(--text-3)', lineHeight: 1.72, maxWidth: 220 }}>
-                  Real-time collaboration for modern, fast-moving teams.
-                </p>
-                <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
-                  {[Github, Mail, Linkedin].map((Icon, i) => (
-                    <a key={i} href="#" style={{ width: 34, height: 34, borderRadius: 9, background: 'var(--accent-dim)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-2)', textDecoration: 'none', transition: 'all .25s', cursor: 'pointer' }}
-                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-2)'; }}>
-                      <Icon size={14} />
-                    </a>
-                  ))}
-                </div>
-              </div>
-              {[
-                { head: 'Product', items: ['Features', 'Pricing', 'Security', 'Changelog'] },
-                { head: 'Company', items: ['About', 'Blog', 'Careers', 'Press'] },
-                { head: 'Legal', items: ['Privacy', 'Terms', 'Cookies', 'DPA'] },
-              ].map(col => (
-                <div key={col.head}>
-                  <h4 style={{ fontFamily: 'var(--font-d)', fontWeight: 800, fontSize: 13, letterSpacing: '-0.03em', color: 'var(--text-1)', marginBottom: 14 }}>{col.head}</h4>
-                  <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 9 }}>
-                    {col.items.map(item => (
-                      <li key={item}>
-                        <a href="#" style={{ fontSize: 13, color: 'var(--text-3)', textDecoration: 'none', transition: 'color .2s' }}
-                          onMouseEnter={e => e.target.style.color = 'var(--accent)'}
-                          onMouseLeave={e => e.target.style.color = 'var(--text-3)'}>
-                          {item}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 12, color: 'var(--text-3)' }}>© 2025 SyncUp Workspace, Inc.</span>
-              <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Made with precision ◈</span>
-            </div>
-          </div>
-        </footer>
-
-      </div>
-    </>
-  );
+            </footer>
+        </>
+    );
 }
