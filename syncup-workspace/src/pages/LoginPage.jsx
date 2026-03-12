@@ -19,9 +19,8 @@ const workspaceFeatures = [
   "Do Not Disturb", "Custom Emojis", "App Directory", "Message Sync"
 ];
 
-export default function LoginPage() {
-  const { login: ctxLogin, darkMode: ctxDarkMode } = useTheme();
-  const [isSignUp, setIsSignUp] = useState(false);
+export default function RegisterPage() {
+  const { login: ctxLogin } = useTheme();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -115,8 +114,6 @@ export default function LoginPage() {
 
     gsap.to(q('.eyeL'), { duration: 0.5, x: eyeLX, y: eyeLY, ease: 'expo.out' });
     gsap.to(q('.eyeR'), { duration: 0.5, x: eyeRX, y: eyeRY, ease: 'expo.out' });
-    // Use a display equation for the core motion logic here:
-    // $$ \text{position} = \cos(\theta) \cdot \text{maxDistance} \cdot \text{scale} $$
     gsap.to(q('.nose'), { duration: 0.5, x: noseX, y: noseY, rotation: mouthR, transformOrigin: 'center center', ease: 'expo.out' });
     gsap.to(q('.mouth'), { duration: 0.5, x: mouthX, y: mouthY, rotation: mouthR, transformOrigin: 'center center', ease: 'expo.out' });
     gsap.to(q('.chin'), { duration: 0.5, x: chinX, y: chinY, scaleY: chinS, ease: 'expo.out' });
@@ -245,13 +242,11 @@ export default function LoginPage() {
     const val = e.target.value;
     setPassword(val);
     if (feedbackMessage.text) setFeedbackMessage({ text: '', type: '' });
-    if (isSignUp) {
-      setPasswordCriteria({
-        length: val.length >= 8 && val.length <= 32,
-        uppercase: /[A-Z]/.test(val), lowercase: /[a-z]/.test(val),
-        number: /\d/.test(val), special: /[@$!%*?&]/.test(val)
-      });
-    }
+    setPasswordCriteria({
+      length: val.length >= 8 && val.length <= 32,
+      uppercase: /[A-Z]/.test(val), lowercase: /[a-z]/.test(val),
+      number: /\d/.test(val), special: /[@$!%*?&]/.test(val)
+    });
   };
 
   const updateYetiArms = (isFocused, isShowingPassword) => {
@@ -285,40 +280,26 @@ export default function LoginPage() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (isSignUp && !name) return setFeedbackMessage({ text: 'Please provide your name.', type: 'error' });
+    if (!name) return setFeedbackMessage({ text: 'Please provide your name.', type: 'error' });
     if (!email || !password) return setFeedbackMessage({ text: 'Please fill in all required fields.', type: 'error' });
-    if (isSignUp) {
-      const { length, uppercase, lowercase, number, special } = passwordCriteria;
-      if (!length || !uppercase || !lowercase || !number || !special) {
-        return setFeedbackMessage({ text: 'Please meet all password requirements.', type: 'error' });
-      }
-      // Save user to localStorage
-      const existingUsers = JSON.parse(localStorage.getItem('syncup_users') || '[]');
-      const alreadyExists = existingUsers.find(u => u.email === email);
-      if (alreadyExists) {
-        return setFeedbackMessage({ text: 'An account with this email already exists.', type: 'error' });
-      }
-      const nameParts = name.trim().split(' ');
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.slice(1).join(' ') || '';
-      const newUser = { name, email, password, firstName, lastName, displayName: name, avatar: `${firstName[0] || ''}${lastName[0] || firstName[1] || ''}`.toUpperCase() };
-      existingUsers.push(newUser);
-      localStorage.setItem('syncup_users', JSON.stringify(existingUsers));
-      // Auto-login after signup
-      ctxLogin(newUser);
-      setFeedbackMessage({ text: 'Account created successfully!', type: 'success' });
-      setTimeout(() => navigate('/workspaces'), 500);
-      return;
+    const { length, uppercase, lowercase, number, special } = passwordCriteria;
+    if (!length || !uppercase || !lowercase || !number || !special) {
+      return setFeedbackMessage({ text: 'Please meet all password requirements.', type: 'error' });
     }
-    // Login: validate against stored users
-    const storedUsers = JSON.parse(localStorage.getItem('syncup_users') || '[]');
-    const matchedUser = storedUsers.find(u => u.email === email && u.password === password);
-    if (matchedUser) {
-      ctxLogin(matchedUser);
-      navigate('/workspaces');
-    } else {
-      setFeedbackMessage({ text: 'Invalid email or password. Please try again.', type: 'error' });
+    const existingUsers = JSON.parse(localStorage.getItem('syncup_users') || '[]');
+    const alreadyExists = existingUsers.find(u => u.email === email);
+    if (alreadyExists) {
+      return setFeedbackMessage({ text: 'An account with this email already exists.', type: 'error' });
     }
+    const nameParts = name.trim().split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+    const newUser = { name, email, password, firstName, lastName, displayName: name, avatar: `${firstName[0] || ''}${lastName[0] || firstName[1] || ''}`.toUpperCase() };
+    existingUsers.push(newUser);
+    localStorage.setItem('syncup_users', JSON.stringify(existingUsers));
+    ctxLogin(newUser);
+    setFeedbackMessage({ text: 'Account created successfully!', type: 'success' });
+    setTimeout(() => navigate('/workspaces'), 500);
   };
 
   const commonDomains = ["gmail.com", "outlook.com", "yahoo.com", "icloud.com", "syncup.io"];
@@ -355,7 +336,6 @@ export default function LoginPage() {
             pointer-events: none; 
             perspective: 1000px; 
         }
-
         .tagcloud-bg .tagcloud-tags {
             position: absolute;
             width: var(--tagcloud-diameter);
@@ -367,12 +347,10 @@ export default function LoginPage() {
             transform-style: preserve-3d;
             animation: tagcloud-rotation var(--tagcloud-animation-duration) var(--tagcloud-animation-direction) linear infinite var(--tagcloud-animation-play-state);
         }
-
         @keyframes tagcloud-rotation {
             from {transform: translate(-50%, -50%) rotateX(0deg) rotateY(0deg);}
             to {transform: translate(-50%, -50%) rotateX(360deg) rotateY(360deg);}
         }
-
         .tagcloud-bg .tagcloud-tag {
             --_radius: calc(calc(var(--tagcloud-diameter) / 2) - calc(var(--tag-diameter) / 2));
             --_phi: acos(calc(-1 + (2 * var(--index)) / var(--num-elements)));
@@ -384,7 +362,6 @@ export default function LoginPage() {
             --_scaled-x: calc((var(--_x) / var(--_vector-length)) * var(--_radius));
             --_scaled-y: calc((var(--_y) / var(--_vector-length)) * var(--_radius));
             --_scaled-z: calc((var(--_z) / var(--_vector-length)) * var(--_radius));
-            
             width: var(--tag-diameter);
             height: var(--tag-diameter); 
             display: flex;
@@ -394,12 +371,10 @@ export default function LoginPage() {
             transform: translate3d(calc(var(--_scaled-x) + var(--_radius)), calc(var(--_scaled-y) + var(--_radius)), var(--_scaled-z));
             animation: tagcloud-tag-rotation var(--tagcloud-animation-duration) var(--tagcloud-animation-direction) linear infinite var(--tagcloud-animation-play-state);
         }
-
         @keyframes tagcloud-tag-rotation {
             from {transform: translate3d(calc(var(--_scaled-x) + var(--_radius)), calc(var(--_scaled-y) + var(--_radius)), var(--_scaled-z)) rotateY(360deg) rotateX(360deg);}
             to {transform: translate3d(calc(var(--_scaled-x) + var(--_radius)), calc(var(--_scaled-y) + var(--_radius)), var(--_scaled-z)) rotateY(0deg) rotateX(0deg);}
         }
-
         .tagcloud-bg .tagcloud-tag div span {
             color: #76ABAE;
             font-weight: 700;
@@ -419,20 +394,20 @@ export default function LoginPage() {
         </ul>
       </div>
 
-   <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-end overflow-hidden w-full pl-6 pr-[5vw]">
-  <h1
-    ref={textRef}
-    className="text-[27.5vw] font-black tracking-tighter text-blue-500/30 dark:text-[#76ABAE]/30 select-none whitespace-nowrap"
-    style={{
-      '--x': '50vw',
-      '--y': '50vh',
-      WebkitMaskImage: 'radial-gradient(circle 500px at var(--x) var(--y), black 0%, transparent 100%)',
-      maskImage: 'radial-gradient(circle 500px at var(--x) var(--y), black 0%, transparent 100%)'
-    }}
-  >
-    SyncUp
-  </h1>
-</div>
+      <div className="fixed inset-0 pointer-events-none z-0 flex items-center justify-end overflow-hidden w-full pl-6 pr-[5vw]">
+        <h1
+          ref={textRef}
+          className="text-[27.5vw] font-black tracking-tighter text-blue-500/30 dark:text-[#76ABAE]/30 select-none whitespace-nowrap"
+          style={{
+            '--x': '50vw',
+            '--y': '50vh',
+            WebkitMaskImage: 'radial-gradient(circle 500px at var(--x) var(--y), black 0%, transparent 100%)',
+            maskImage: 'radial-gradient(circle 500px at var(--x) var(--y), black 0%, transparent 100%)'
+          }}
+        >
+          SyncUp
+        </h1>
+      </div>
 
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
         <div 
@@ -448,12 +423,23 @@ export default function LoginPage() {
       </div>
 
       <div className="relative z-10 w-full max-w-[480px] p-4">
-        <div ref={cardRef} className="w-full bg-white/90 dark:bg-[#31363F]/85 backdrop-blur-xl rounded-[2rem] shadow-2xl border border-slate-200/50 dark:border-[#76ABAE]/20 p-6 md:p-8 transition-colors duration-500">
-          
+        <div ref={cardRef} className="w-full bg-white/90 dark:bg-[#31363F]/85 backdrop-blur-xl rounded-[2rem] shadow-2xl border border-slate-200/50 dark:border-[#76ABAE]/20 p-6 md:p-8 transition-colors duration-500 relative">
+
+          {/* ← Back Arrow */}
+          <button
+            onClick={() => navigate(-1)}
+            className="absolute top-5 left-5 p-2 rounded-xl text-slate-400 dark:text-[#EEEEEE]/50 hover:text-blue-600 dark:hover:text-[#76ABAE] hover:bg-slate-100 dark:hover:bg-[#222831]/50 transition-all duration-200"
+            aria-label="Go back"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+
           <div className="text-center mb-6 form-element">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-[#EEEEEE]">Welcome to <span className="text-blue-600 dark:text-[#76ABAE]">SyncUp Workspace</span></h1>
             <p className="text-sm text-slate-500 dark:text-[#EEEEEE]/70 mt-1">
-              {isSignUp ? 'Create a new account to get started.' : 'Sign in to sync with your team.'}
+              Create a new account to get started.
             </p>
           </div>
 
@@ -466,9 +452,7 @@ export default function LoginPage() {
                 <clipPath id="armMask">
                   <use href="#armMaskPath" overflow="visible" />
                 </clipPath>
-                
                 <circle cx="100" cy="100" r="100" className="fill-slate-50 dark:fill-[#222831]/50 transition-colors duration-500" />
-                
                 <g className="body">
                   <path fill="#FFFFFF" d="M193.3,135.9c-5.8-8.4-15.5-13.9-26.5-13.9H151V72c0-27.6-22.4-50-50-50S51,44.4,51,72v50H32.1 c-10.6,0-20,5.1-25.8,13l0,78h187L193.3,135.9z" />
                   <path fill="none" stroke="#456882" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" d="M193.3,135.9 c-5.8-8.4-15.5-13.9-26.5-13.9H151V72c0-27.6-22.4-50-50-50S51,44.4,51,72v50H32.1c-10.6,0-20,5.1-25.8,13" />
@@ -559,25 +543,21 @@ export default function LoginPage() {
               </div>
             )}
 
-            <div className={`grid transition-[grid-template-rows] duration-500 ease-out ${isSignUp ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
-              <div className="overflow-hidden">
-                <div className="form-element space-y-1.5 relative pb-4">
-                  <label className="text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-[#EEEEEE]/70 ml-1">Full Name</label>
-                  <div className={inputContainerStyle}>
-                    <User className={iconStyle} />
-                    <input 
-                      type="text" 
-                      placeholder="Username" 
-                      className={inputStyle}
-                      value={name}
-                      ref={nameRef}
-                      onChange={handleNameInput}
-                      onFocus={() => { setIsTrackingInput(true); setTimeout(() => getCoord(nameRef), 50); }}
-                      onBlur={() => { setIsTrackingInput(false); resetFace(); }}
-                      required={isSignUp}
-                    />
-                  </div>
-                </div>
+            <div className="form-element space-y-1.5 relative pb-4">
+              <label className="text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-[#EEEEEE]/70 ml-1">Full Name</label>
+              <div className={inputContainerStyle}>
+                <User className={iconStyle} />
+                <input 
+                  type="text" 
+                  placeholder="Username" 
+                  className={inputStyle}
+                  value={name}
+                  ref={nameRef}
+                  onChange={handleNameInput}
+                  onFocus={() => { setIsTrackingInput(true); setTimeout(() => getCoord(nameRef), 50); }}
+                  onBlur={() => { setIsTrackingInput(false); resetFace(); }}
+                  required
+                />
               </div>
             </div>
 
@@ -630,53 +610,49 @@ export default function LoginPage() {
                 </button>
               </div>
 
-              {isSignUp && (
-                <div className="mt-2 space-y-1.5 text-xs font-medium px-2">
-                  <p className="text-slate-500 dark:text-[#EEEEEE]/70 mb-1.5">Password must contain:</p>
-                  <ul className="grid grid-cols-2 gap-1.5">
-                    <li className={`flex items-center space-x-1.5 transition-colors duration-300 ${passwordCriteria.length ? 'text-emerald-500' : 'text-slate-400 dark:text-[#EEEEEE]/40'}`}>
-                      <CheckCircle className="w-3.5 h-3.5" /> <span>8-32 characters</span>
-                    </li>
-                    <li className={`flex items-center space-x-1.5 transition-colors duration-300 ${passwordCriteria.uppercase ? 'text-emerald-500' : 'text-slate-400 dark:text-[#EEEEEE]/40'}`}>
-                      <CheckCircle className="w-3.5 h-3.5" /> <span>Uppercase letter</span>
-                    </li>
-                    <li className={`flex items-center space-x-1.5 transition-colors duration-300 ${passwordCriteria.lowercase ? 'text-emerald-500' : 'text-slate-400 dark:text-[#EEEEEE]/40'}`}>
-                      <CheckCircle className="w-3.5 h-3.5" /> <span>Lowercase letter</span>
-                    </li>
-                    <li className={`flex items-center space-x-1.5 transition-colors duration-300 ${passwordCriteria.number ? 'text-emerald-500' : 'text-slate-400 dark:text-[#EEEEEE]/40'}`}>
-                      <CheckCircle className="w-3.5 h-3.5" /> <span>Number</span>
-                    </li>
-                    <li className={`flex items-center space-x-1.5 transition-colors duration-300 ${passwordCriteria.special ? 'text-emerald-500' : 'text-slate-400 dark:text-[#EEEEEE]/40'}`}>
-                      <CheckCircle className="w-3.5 h-3.5" /> <span>Special character</span>
-                    </li>
-                  </ul>
-                </div>
-              )}
+              <div className="mt-2 space-y-1.5 text-xs font-medium px-2">
+                <p className="text-slate-500 dark:text-[#EEEEEE]/70 mb-1.5">Password must contain:</p>
+                <ul className="grid grid-cols-2 gap-1.5">
+                  <li className={`flex items-center space-x-1.5 transition-colors duration-300 ${passwordCriteria.length ? 'text-emerald-500' : 'text-slate-400 dark:text-[#EEEEEE]/40'}`}>
+                    <CheckCircle className="w-3.5 h-3.5" /> <span>8-32 characters</span>
+                  </li>
+                  <li className={`flex items-center space-x-1.5 transition-colors duration-300 ${passwordCriteria.uppercase ? 'text-emerald-500' : 'text-slate-400 dark:text-[#EEEEEE]/40'}`}>
+                    <CheckCircle className="w-3.5 h-3.5" /> <span>Uppercase letter</span>
+                  </li>
+                  <li className={`flex items-center space-x-1.5 transition-colors duration-300 ${passwordCriteria.lowercase ? 'text-emerald-500' : 'text-slate-400 dark:text-[#EEEEEE]/40'}`}>
+                    <CheckCircle className="w-3.5 h-3.5" /> <span>Lowercase letter</span>
+                  </li>
+                  <li className={`flex items-center space-x-1.5 transition-colors duration-300 ${passwordCriteria.number ? 'text-emerald-500' : 'text-slate-400 dark:text-[#EEEEEE]/40'}`}>
+                    <CheckCircle className="w-3.5 h-3.5" /> <span>Number</span>
+                  </li>
+                  <li className={`flex items-center space-x-1.5 transition-colors duration-300 ${passwordCriteria.special ? 'text-emerald-500' : 'text-slate-400 dark:text-[#EEEEEE]/40'}`}>
+                    <CheckCircle className="w-3.5 h-3.5" /> <span>Special character</span>
+                  </li>
+                </ul>
+              </div>
             </div>
 
             <button 
               type="submit"
               className="form-element w-full mt-2 py-3 px-6 bg-blue-600 dark:bg-[#76ABAE] hover:bg-blue-700 dark:hover:bg-[#76ABAE]/80 text-white dark:text-[#222831] rounded-xl font-bold tracking-wide shadow-lg shadow-blue-500/30 dark:hover:shadow-[#76ABAE]/40 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300"
             >
-              {isSignUp ? 'Create Workspace Account' : 'Sign In'}
+              Create Workspace Account
             </button>
           </form>
-          
+
+          {/* Sign In Link */}
           <div className="mt-4 text-center form-element relative z-10">
             <p className="text-sm text-slate-500 dark:text-[#EEEEEE]/70">
-              {isSignUp ? 'Already have an account?' : "Don't have an account?"}
+              Already have an account?
               <button
-                onClick={() => {
-                  setIsSignUp(!isSignUp);
-                  if (feedbackMessage.text) setFeedbackMessage({ text: '', type: '' });
-                  if (!isSignUp) setPasswordCriteria({ length: false, uppercase: false, lowercase: false, number: false, special: false });
-                }}
+                onClick={() => navigate('/login')}
                 className="ml-2 font-bold text-blue-600 dark:text-[#76ABAE] hover:underline transition-all"
               >
-                {isSignUp ? 'Sign In' : 'Sign Up'}
+                Sign In
               </button>
             </p>
           </div>
+
         </div>
       </div>
     </div>
