@@ -1,17 +1,23 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Hash, Link, Copy, Check, UserPlus } from 'lucide-react';
 import { gsap } from 'gsap';
+import { useWorkspace } from '../context/WorkspaceContext';
 
-const generateInviteId = () => Math.random().toString(36).substring(2, 10).toUpperCase();
-const generateInviteLink = (id) => `https://syncup.io/join/${id}`;
-
-const AddMemberModal = ({ isOpen, onClose }) => {
-  const [inviteId] = useState(() => generateInviteId());
-  const [inviteLink] = useState(() => generateInviteLink(generateInviteId()));
+const AddMemberModal = ({ isOpen, onClose, workspaceId }) => {
+  const { createInvite } = useWorkspace();
+  const [inviteData, setInviteData] = useState(null);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const modalRef = useRef(null);
   const overlayRef = useRef(null);
+
+  // Generate invite when modal opens
+  useEffect(() => {
+    if (isOpen && workspaceId) {
+      const data = createInvite(workspaceId);
+      setInviteData(data);
+    }
+  }, [isOpen, workspaceId, createInvite]);
 
   useEffect(() => {
     if (isOpen && modalRef.current) {
@@ -32,16 +38,18 @@ const AddMemberModal = ({ isOpen, onClose }) => {
   };
 
   const handleCopyCode = () => {
-    navigator.clipboard.writeText(inviteId);
+    if (!inviteData) return;
+    navigator.clipboard.writeText(inviteData.code);
     setCopiedCode(true);
     gsap.fromTo('.copy-code-btn', { scale: 1 }, { scale: 1.12, duration: 0.15, yoyo: true, repeat: 1, ease: 'power2.out' });
     setTimeout(() => setCopiedCode(false), 2000);
   };
 
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(inviteLink);
+    if (!inviteData) return;
+    navigator.clipboard.writeText(inviteData.link);
     setCopiedLink(true);
-    gsap.fromTo('.copy-link-btn', { scale: 1 }, { scale: 1.12, duration: 0.15, yoyo: true, repeat: 1, ease: 'power2.out' });
+    gsap.fromTo('.copy-link-modal-btn', { scale: 1 }, { scale: 1.12, duration: 0.15, yoyo: true, repeat: 1, ease: 'power2.out' });
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
@@ -73,7 +81,7 @@ const AddMemberModal = ({ isOpen, onClose }) => {
             <div className="flex gap-2">
               <div className="flex-1 bg-slate-50 dark:bg-[#222831]/80 border border-slate-200 dark:border-[#76ABAE]/30 px-4 py-3 rounded-xl flex items-center gap-2">
                 <Hash className="w-4 h-4 text-blue-600 dark:text-[#76ABAE] flex-shrink-0" />
-                <span className="text-sm font-mono font-bold tracking-widest text-blue-600 dark:text-[#76ABAE]">{inviteId}</span>
+                <span className="text-sm font-mono font-bold tracking-widest text-blue-600 dark:text-[#76ABAE]">{inviteData?.code || '--------'}</span>
               </div>
               <button
                 onClick={handleCopyCode}
@@ -92,11 +100,11 @@ const AddMemberModal = ({ isOpen, onClose }) => {
             <div className="flex gap-2">
               <div className="flex-1 bg-slate-50 dark:bg-[#222831]/80 border border-slate-200 dark:border-[#76ABAE]/30 px-4 py-3 rounded-xl flex items-center gap-2 overflow-hidden">
                 <Link className="w-4 h-4 text-blue-600 dark:text-[#76ABAE] flex-shrink-0" />
-                <span className="text-xs font-mono text-slate-500 dark:text-[#EEEEEE]/50 truncate">{inviteLink}</span>
+                <span className="text-xs font-mono text-slate-500 dark:text-[#EEEEEE]/50 truncate">{inviteData?.link || 'https://syncup.io/join/...'}</span>
               </div>
               <button
                 onClick={handleCopyLink}
-                className={`copy-link-btn px-4 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all duration-300 border ${copiedLink ? 'bg-green-500 text-white border-green-500 shadow-lg shadow-green-500/30' : 'bg-slate-100 dark:bg-[#222831]/80 text-slate-700 dark:text-[#EEEEEE]/70 border-slate-200 dark:border-[#76ABAE]/20 hover:bg-blue-600 dark:hover:bg-[#76ABAE] hover:text-white dark:hover:text-[#222831] hover:border-transparent'}`}
+                className={`copy-link-modal-btn px-4 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all duration-300 border ${copiedLink ? 'bg-green-500 text-white border-green-500 shadow-lg shadow-green-500/30' : 'bg-slate-100 dark:bg-[#222831]/80 text-slate-700 dark:text-[#EEEEEE]/70 border-slate-200 dark:border-[#76ABAE]/20 hover:bg-blue-600 dark:hover:bg-[#76ABAE] hover:text-white dark:hover:text-[#222831] hover:border-transparent'}`}
               >
                 {copiedLink ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                 {copiedLink ? 'Copied!' : 'Copy'}

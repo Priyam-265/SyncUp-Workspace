@@ -1084,7 +1084,7 @@ export default function RegisterPage() {
 
           {/* ← Back Arrow */}
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => navigate('/')}
             className="absolute top-5 left-5 p-2 rounded-xl text-slate-400 dark:text-[#EEEEEE]/50 hover:text-blue-600 dark:hover:text-[#76ABAE] hover:bg-slate-100 dark:hover:bg-[#222831]/50 transition-all duration-200"
             aria-label="Go back"
           >
@@ -1092,7 +1092,7 @@ export default function RegisterPage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-
+          
           <div className="text-center mb-6 form-element">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-[#EEEEEE]">Welcome to <span className="text-blue-600 dark:text-[#76ABAE]">SyncUp Workspace</span></h1>
             <p className="text-sm text-slate-500 dark:text-[#EEEEEE]/70 mt-1">
@@ -1296,19 +1296,7 @@ export default function RegisterPage() {
               Create Workspace Account
             </button>
           </form>
-
-          {/* Sign In Link */}
-          <div className="mt-4 text-center form-element relative z-10">
-            <p className="text-sm text-slate-500 dark:text-[#EEEEEE]/70">
-              Already have an account?
-              <button
-                onClick={() => navigate('/login')}
-                className="ml-2 font-bold text-blue-600 dark:text-[#76ABAE] hover:underline transition-all"
-              >
-                Sign In
-              </button>
-            </p>
-          </div>
+          
 
         </div>
       </div>

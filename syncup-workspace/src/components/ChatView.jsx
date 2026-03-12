@@ -47,7 +47,7 @@ const ChatView = ({ chatDetails, messages, onSendMessage, onReaction, currentUse
 
     if (e.target.value.trim()) {
       if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
-      setTypingUser('Sarah');
+      setTypingUser(currentUser?.name || 'Someone');
       typingTimerRef.current = setTimeout(() => {
         setTypingUser(null);
       }, 3000);
