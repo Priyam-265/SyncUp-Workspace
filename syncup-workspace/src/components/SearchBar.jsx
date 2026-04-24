@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { searchApi } from '../services/api';
+import { userAPI } from '../services/api';
 import { Search, Loader, X, Hash, User, MessageSquare } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -34,8 +34,12 @@ const SearchBar = () => {
   useEffect(() => {
     if (debouncedQuery) {
       setIsLoading(true);
-      searchApi(debouncedQuery).then(data => {
-        setResults(data);
+      userAPI.search(debouncedQuery).then(data => {
+        setResults({ channels: [], users: Array.isArray(data) ? data : [], messages: [] });
+        setIsLoading(false);
+      }).catch(err => {
+        console.error(err);
+        setResults({ channels: [], users: [], messages: [] });
         setIsLoading(false);
       });
     } else {
@@ -102,11 +106,11 @@ const SearchBar = () => {
                     <h3 className="text-xs font-semibold text-slate-400 uppercase px-2 mb-1">Users</h3>
                     <ul>
                       {results.users.map(user => (
-                        <li key={`usr-${user.id}`} onClick={() => handleResultClick(`/dashboard/${wsId}/dm/${user.id}`)} className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer">
-                          <div className={`w-6 h-6 bg-gradient-to-br ${user.color || 'from-blue-500 to-cyan-500'} rounded-full flex items-center justify-center text-white font-bold text-[10px]`}>
-                            {user.avatar}
+                        <li key={`usr-${user._id}`} onClick={() => handleResultClick(`/dashboard/${wsId}/dm/${user._id}`)} className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer">
+                          <div className={`w-6 h-6 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-[10px]`}>
+                            {user.avatar || 'U'}
                           </div>
-                          <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{user.name}</span>
+                          <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{user.fullName || user.email}</span>
                         </li>
                       ))}
                     </ul>

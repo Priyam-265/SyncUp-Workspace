@@ -267,21 +267,18 @@ export default function LoginPage() {
     if (isPasswordFocused) updateYetiArms(true, newShowPassword);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!email || !password) return setFeedbackMessage({ text: 'Please fill in all required fields.', type: 'error' });
-    // Check against stored users
-    const existingUsers = JSON.parse(localStorage.getItem('syncup_users') || '[]');
-    const foundUser = existingUsers.find(u => u.email === email && u.password === password);
-    if (foundUser) {
-      ctxLogin(foundUser);
+    if (!email || !password) {
+      return setFeedbackMessage({ text: 'Please fill in all required fields.', type: 'error' });
+    }
+    
+    try {
+      await ctxLogin({ email, password });
       setFeedbackMessage({ text: 'Login successful!', type: 'success' });
       setTimeout(() => navigate('/workspaces'), 500);
-    } else {
-      // For demo: auto-login with default user
-      ctxLogin({ name: 'John Doe', email, displayName: 'John Doe', firstName: 'John', lastName: 'Doe', avatar: 'JD' });
-      setFeedbackMessage({ text: 'Welcome back!', type: 'success' });
-      setTimeout(() => navigate('/workspaces'), 500);
+    } catch (err) {
+      setFeedbackMessage({ text: err.message || 'Invalid credentials or login failed.', type: 'error' });
     }
   };
 

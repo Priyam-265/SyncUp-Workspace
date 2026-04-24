@@ -20,7 +20,7 @@
 // ];
 
 // export default function RegisterPage() {
-//   const { login: ctxLogin } = useTheme();
+//   const { register: ctxRegister } = useTheme();
 //   const [name, setName] = useState('');
 //   const [email, setEmail] = useState('');
 //   const [password, setPassword] = useState('');
@@ -677,7 +677,7 @@ const workspaceFeatures = [
 ];
 
 export default function RegisterPage() {
-  const { login: ctxLogin } = useTheme();
+  const { register: ctxRegister } = useTheme();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -935,7 +935,7 @@ export default function RegisterPage() {
     if (isPasswordFocused) updateYetiArms(true, newShowPassword);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name) return setFeedbackMessage({ text: 'Please provide your name.', type: 'error' });
     if (!email || !password) return setFeedbackMessage({ text: 'Please fill in all required fields.', type: 'error' });
@@ -943,20 +943,24 @@ export default function RegisterPage() {
     if (!length || !uppercase || !lowercase || !number || !special) {
       return setFeedbackMessage({ text: 'Please meet all password requirements.', type: 'error' });
     }
-    const existingUsers = JSON.parse(localStorage.getItem('syncup_users') || '[]');
-    const alreadyExists = existingUsers.find(u => u.email === email);
-    if (alreadyExists) {
-      return setFeedbackMessage({ text: 'An account with this email already exists.', type: 'error' });
-    }
     const nameParts = name.trim().split(' ');
     const firstName = nameParts[0] || '';
     const lastName = nameParts.slice(1).join(' ') || '';
-    const newUser = { name, email, password, firstName, lastName, displayName: name, avatar: `${firstName[0] || ''}${lastName[0] || firstName[1] || ''}`.toUpperCase() };
-    existingUsers.push(newUser);
-    localStorage.setItem('syncup_users', JSON.stringify(existingUsers));
-    ctxLogin(newUser);
-    setFeedbackMessage({ text: 'Account created successfully!', type: 'success' });
-    setTimeout(() => navigate('/workspaces'), 500);
+    
+    try {
+      await ctxRegister({
+        email,
+        password,
+        firstName,
+        lastName,
+        displayName: name,
+        fullName: name
+      });
+      setFeedbackMessage({ text: 'Account created successfully!', type: 'success' });
+      setTimeout(() => navigate('/workspaces'), 500);
+    } catch (err) {
+      setFeedbackMessage({ text: err.message || 'Registration failed', type: 'error' });
+    }
   };
 
   const commonDomains = ["gmail.com", "outlook.com", "yahoo.com", "icloud.com", "syncup.io"];

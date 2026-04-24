@@ -8,7 +8,7 @@ import { useTheme } from '../context/ThemeContext';
 
 const SettingsPage = () => {
   const navigate = useNavigate();
-  const { darkMode, toggleDarkMode, currentUser, updateUser, settings, updateSettings } = useTheme();
+  const { darkMode, toggleDarkMode, currentUser, updateUser, uploadAvatar, settings, updateSettings } = useTheme();
 
   const [activeTab, setActiveTab] = useState('profile');
   const [showOldPassword, setShowOldPassword] = useState(false);
@@ -44,14 +44,36 @@ const SettingsPage = () => {
     setTimeout(() => setShowSaveToast(false), 2500);
   };
 
-  const handleSaveProfile = () => {
-    updateUser({ firstName, lastName, displayName, bio, phone, avatar: `${firstName[0] || 'J'}${lastName[0] || 'D'}` });
-    showToast();
+  const fileInputRef = React.useRef(null);
+
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        await uploadAvatar(currentUser._id, file);
+        showToast();
+      } catch (err) {
+        console.error(err);
+      }
+    }
   };
 
-  const handleSaveEmail = () => {
-    updateUser({ email });
-    showToast();
+  const handleSaveProfile = async () => {
+    try {
+      await updateUser(currentUser._id, { firstName, lastName, displayName, bio, phone });
+      showToast();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSaveEmail = async () => {
+    try {
+      await updateUser(currentUser._id, { email });
+      showToast();
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleToggleNotif = (key) => {
@@ -158,7 +180,14 @@ const SettingsPage = () => {
                           </button>
                         </div>
                         <div className="flex-1">
-                          <button className="px-5 py-2.5 bg-blue-600 dark:bg-[#76ABAE] text-white dark:text-[#222831] rounded-xl hover:shadow-lg hover:shadow-blue-500/30 dark:hover:shadow-[#76ABAE]/20 transition-all font-medium">
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            ref={fileInputRef} 
+                            style={{ display: 'none' }} 
+                            onChange={handleAvatarUpload} 
+                          />
+                          <button onClick={() => fileInputRef.current?.click()} className="px-5 py-2.5 bg-blue-600 dark:bg-[#76ABAE] text-white dark:text-[#222831] rounded-xl hover:shadow-lg hover:shadow-blue-500/30 dark:hover:shadow-[#76ABAE]/20 transition-all font-medium">
                             Upload Photo
                           </button>
                           <button className="ml-3 px-5 py-2.5 bg-slate-100 dark:bg-[#222831]/80 text-slate-700 dark:text-[#EEEEEE]/70 rounded-xl hover:bg-slate-200 dark:hover:bg-[#222831] transition-all font-medium">

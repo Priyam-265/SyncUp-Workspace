@@ -151,7 +151,11 @@ const WORKSPACE_NAVBAR_CSS = `
 const WorkspaceSelectionPage = () => {
   const navigate = useNavigate();
   const { currentUser, logout } = useTheme();
-  const { createInvite, resolveInvite } = useWorkspace();
+  const { workspaces, loading, fetchWorkspaces, createWorkspace, joinWorkspace } = useWorkspace();
+
+  useEffect(() => {
+    fetchWorkspaces();
+  }, [fetchWorkspaces]);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
@@ -175,17 +179,12 @@ const WorkspaceSelectionPage = () => {
   const overlayRef = useRef(null);
   const profileDropdownRef = useRef(null);
 
-  const workspaces = [
-    { id: 1, name: 'Acme Corporation', icon: '🏢', members: 24, channels: 12, color: 'from-blue-500 to-cyan-500', lastActive: '2 minutes ago' },
-    { id: 2, name: 'Startup Labs', icon: '🚀', members: 8, channels: 6, color: 'from-purple-500 to-pink-500', lastActive: '1 hour ago' },
-    { id: 3, name: 'Design Team', icon: '🎨', members: 15, channels: 9, color: 'from-orange-500 to-red-500', lastActive: '3 hours ago' },
-    { id: 4, name: 'Engineering Hub', icon: '⚙️', members: 32, channels: 18, color: 'from-green-500 to-emerald-500', lastActive: '5 minutes ago' }
-  ];
+  // workspaces are fetched from context
 
   // Build user avatar
-  const userAvatar = currentUser.avatar || (currentUser.displayName || 'U').substring(0, 2).toUpperCase();
-  const userName = currentUser.displayName || 'User';
-  const userEmail = currentUser.email || 'user@email.com';
+  const userAvatar = currentUser?.avatar || (currentUser?.displayName || currentUser?.fullName || 'U').substring(0, 2).toUpperCase();
+  const userName = currentUser?.displayName || currentUser?.fullName || 'User';
+  const userEmail = currentUser?.email || 'user@email.com';
 
   // Inject CSS
   useEffect(() => {
@@ -297,13 +296,22 @@ const WorkspaceSelectionPage = () => {
   };
 
   // ── Handlers ────────────────────────────────────────────────────
-  const handleCreateWorkspace = (e) => {
+  const handleCreateWorkspace = async (e) => {
     e.preventDefault();
     gsap.to(e.submitter || e.target, { scale: 0.96, duration: 0.1, yoyo: true, repeat: 1 });
-    // Generate invite using shared context (use workspace id 5 for newly created)
-    const newWsId = workspaces.length + 1;
-    const { code, link } = createInvite(newWsId);
-    setCreatedWorkspace({ ...newWorkspace, inviteId: code, inviteLink: link });
+    
+    try {
+      const created = await createWorkspace({
+        name: newWorkspace.name,
+        icon: newWorkspace.icon,
+        description: 'New workspace'
+      });
+      // Use the returned inviteCode
+      const inviteLink = `https://syncup.io/join/${created.inviteCode}`;
+      setCreatedWorkspace({ ...created, inviteId: created.inviteCode, inviteLink });
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleFinishCreate = () => {
@@ -342,32 +350,33 @@ const WorkspaceSelectionPage = () => {
     setTimeout(() => setCopiedId(false), 2000);
   };
 
-  const handleJoinWorkspace = (e) => {
+  const handleJoinWorkspace = async (e) => {
     e.preventDefault();
-    const val = joinValue.trim();
+    let val = joinValue.trim();
     if (!val) {
       setJoinError('Please enter a workspace ID or invite link.');
       gsap.fromTo('.join-input', { x: 0 }, { x: 8, duration: 0.07, repeat: 5, yoyo: true, ease: 'power2.inOut' });
       return;
     }
-    const isLink = val.startsWith('http');
-    const isId = /^[A-Z0-9]{8}$/i.test(val);
-    if (!isLink && !isId) {
-      setJoinError('Invalid format. Enter a valid ID (e.g. AB12CD34) or full invite link.');
-      gsap.fromTo('.join-input', { x: 0 }, { x: 8, duration: 0.07, repeat: 5, yoyo: true, ease: 'power2.inOut' });
-      return;
+    
+    // Extract code if it's a URL
+    if (val.startsWith('http')) {
+      const parts = val.split('/');
+      val = parts[parts.length - 1];
     }
 
-    // Resolve invite code via shared context
-    const wsId = resolveInvite(val);
-    const targetWsId = wsId || 1; // Default to workspace 1 if code not found
-
-    closeWithAnimation(joinModalRef, () => {
-      setShowJoinModal(false);
-      setJoinValue('');
-      setJoinError('');
-      navigate(`/dashboard/${targetWsId}`);
-    });
+    try {
+      const joined = await joinWorkspace(val.toUpperCase());
+      closeWithAnimation(joinModalRef, () => {
+        setShowJoinModal(false);
+        setJoinValue('');
+        setJoinError('');
+        navigate(`/dashboard/${joined._id}`);
+      });
+    } catch (err) {
+      setJoinError(err.message || 'Failed to join workspace.');
+      gsap.fromTo('.join-input', { x: 0 }, { x: 8, duration: 0.07, repeat: 5, yoyo: true, ease: 'power2.inOut' });
+    }
   };
 
   const handleCloseJoin = () => {
@@ -508,15 +517,20 @@ const WorkspaceSelectionPage = () => {
 
             {/* Workspace Grid */}
             <div ref={gridRef} className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
-              {workspaces.map((workspace) => (
+              {loading ? (
+                <div className="col-span-full py-12 flex flex-col items-center justify-center">
+                  <div className="w-8 h-8 border-4 border-blue-500/20 border-t-blue-600 rounded-full animate-spin"></div>
+                  <p className="mt-4 text-slate-500">Loading workspaces...</p>
+                </div>
+              ) : workspaces.map((workspace) => (
                 <button
-                  key={workspace.id}
-                  onClick={() => navigate(`/dashboard/${workspace.id}`)}
+                  key={workspace._id}
+                  onClick={() => navigate(`/dashboard/${workspace._id}`)}
                   className="workspace-card group bg-white/90 dark:bg-[#31363F]/85 backdrop-blur-xl rounded-[1.5rem] p-6 border border-slate-200/50 dark:border-[#76ABAE]/20 hover:shadow-2xl hover:shadow-blue-500/10 dark:hover:shadow-[#76ABAE]/10 transition-shadow duration-300 text-left"
                 >
                   <div className="flex items-start justify-between mb-4">
-                    <div className={`card-icon w-14 h-14 bg-gradient-to-br ${workspace.color} rounded-2xl flex items-center justify-center text-2xl shadow-lg`}>
-                      {workspace.icon}
+                    <div className={`card-icon w-14 h-14 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center text-2xl shadow-lg`}>
+                      {workspace.icon || '🏢'}
                     </div>
                     <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-[#EEEEEE]/50 font-medium">
                       <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
@@ -527,10 +541,9 @@ const WorkspaceSelectionPage = () => {
                     {workspace.name}
                   </h3>
                   <div className="flex items-center gap-4 text-sm text-slate-500 dark:text-[#EEEEEE]/50 mb-3">
-                    <div className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /><span>{workspace.members} members</span></div>
-                    <div className="flex items-center gap-1.5"><Hash className="w-3.5 h-3.5" /><span>{workspace.channels} channels</span></div>
+                    <div className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /><span>{workspace.members?.length || 0} members</span></div>
+                    <div className="flex items-center gap-1.5"><Hash className="w-3.5 h-3.5" /><span>{workspace.channels?.length || 0} channels</span></div>
                   </div>
-                  <div className="text-xs text-slate-400 dark:text-[#EEEEEE]/40">Last active: {workspace.lastActive}</div>
                   <div className="mt-4 pt-4 border-t border-slate-200/50 dark:border-[#76ABAE]/20 flex items-center justify-between">
                     <span className="text-sm font-bold text-blue-600 dark:text-[#76ABAE]">Open workspace</span>
                     <ArrowRight className="card-arrow w-4 h-4 text-blue-600 dark:text-[#76ABAE]" />

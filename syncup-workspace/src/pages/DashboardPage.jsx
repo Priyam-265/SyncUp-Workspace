@@ -11,157 +11,251 @@ import CreateDirectMessageModal from '../components/CreateDirectMessageModal';
 import AddMemberModal from '../components/AddMemberModal';
 import { useTheme } from '../context/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { users as mockUsers, channels as initialChannels, messages as initialMessages } from '../data/mockData';
-
-// Sample workspaces for dashboard
-const sampleWorkspaces = [
-  { id: 1, name: 'Acme Corporation', icon: '🏢', abbr: 'AC', color: 'from-blue-500 to-cyan-500' },
-  { id: 2, name: 'Startup Labs', icon: '🚀', abbr: 'SL', color: 'from-purple-500 to-pink-500' },
-];
+import { messageAPI, channelAPI } from '../services/api';
+import { socketService } from '../services/socket';
 
 const DashboardPage = () => {
   const navigate = useNavigate();
   const { workspaceId, channelId, userId } = useParams();
   const { darkMode, toggleDarkMode, currentUser, logout } = useTheme();
-  const { createInvite } = useWorkspace();
+  const { workspaces, fetchWorkspaces } = useWorkspace();
 
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [activeChat, setActiveChat] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [channels, setChannels] = useState(initialChannels);
+  const [channels, setChannels] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
   const [isCreateChannelModalOpen, setCreateChannelModalOpen] = useState(false);
   const [isCreateDmModalOpen, setCreateDmModalOpen] = useState(false);
   const [isAddMemberModalOpen, setAddMemberModalOpen] = useState(false);
-  const [activeWorkspace, setActiveWorkspace] = useState(sampleWorkspaces[0]);
-
-  // Build the current user from ThemeContext — if user signed up as "Ramu", this shows "Ramu"
-  const appUser = {
-    id: currentUser.id || 6,
-    name: currentUser.displayName || currentUser.name || 'You',
-    avatar: currentUser.avatar || (currentUser.displayName || 'Y').substring(0, 2).toUpperCase(),
-    color: currentUser.color || 'from-pink-500 to-rose-500',
-    status: currentUser.status || 'online',
-  };
-
-  // Build full user list = mock users + current user (replace user 6 "John Doe" with actual logged-in user)
-  const allUsers = [
-    ...mockUsers.filter(u => u.id !== 6),
-    { ...appUser },
-  ];
+  const [activeWorkspace, setActiveWorkspace] = useState(null);
 
   useEffect(() => {
-    // Match workspace from URL
-    const wsId = parseInt(workspaceId) || 1;
-    const ws = sampleWorkspaces.find(w => w.id === wsId) || sampleWorkspaces[0];
-    setActiveWorkspace(ws);
-  }, [workspaceId]);
+    if (workspaces.length === 0) fetchWorkspaces();
+  }, [fetchWorkspaces, workspaces.length]);
+
+  useEffect(() => {
+    if (workspaces.length > 0) {
+      const ws = workspaces.find(w => w._id === workspaceId) || workspaces[0];
+      if (ws) {
+        setActiveWorkspace(ws);
+        setChannels(ws.channels || []);
+        
+        if (!currentUser) return; // Prevent crash when currentUser is not loaded
+
+        const appUser = {
+          id: currentUser._id,
+          name: currentUser.displayName || currentUser.firstName || currentUser.fullName || 'You',
+          avatar: currentUser.avatar || (currentUser.displayName || currentUser.fullName || 'Y').substring(0, 2).toUpperCase(),
+          color: currentUser.color || 'from-pink-500 to-rose-500',
+          status: currentUser.status || 'online',
+        };
+
+        const mappedMembers = (ws.members || []).map(m => {
+          if (m._id === currentUser._id) return appUser;
+          return {
+            id: m._id,
+            name: m.fullName || m.displayName || m.email,
+            avatar: m.avatar || 'U',
+            color: 'from-blue-500 to-cyan-500',
+            status: m.status || 'online',
+          };
+        });
+
+        if (!mappedMembers.find(m => m.id === appUser.id)) {
+           mappedMembers.push(appUser);
+        }
+        setAllUsers(mappedMembers);
+      }
+    }
+  }, [workspaceId, workspaces, currentUser]);
+
+  useEffect(() => {
+    if (!activeWorkspace || !currentUser) return;
+    
+    socketService.connect();
+    socketService.joinWorkspace(activeWorkspace._id);
+    socketService.emit('user-online', { userId: currentUser._id, workspaceId: activeWorkspace._id });
+
+    const onPresenceChange = ({ userId, status }) => {
+      setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, status } : u));
+    };
+
+    socketService.on('user-status-changed', onPresenceChange);
+
+    return () => {
+      socketService.emit('user-offline', { userId: currentUser._id, workspaceId: activeWorkspace._id });
+      socketService.leaveWorkspace(activeWorkspace._id);
+      socketService.off('user-status-changed', onPresenceChange);
+    };
+  }, [activeWorkspace, currentUser]);
 
   useEffect(() => {
     let chat = null;
-    if (channelId) {
-      chat = channels.find(c => c.id === parseInt(channelId));
-      if (chat) setActiveChat({ type: 'channel', ...chat });
-    } else if (userId) {
-      chat = allUsers.find(u => u.id === parseInt(userId));
+    if (channelId && channels.length > 0) {
+      chat = channels.find(c => c._id === channelId) || channels[0];
+      if (chat) Object.assign(chat, { isPrivate: chat.isPrivate, inviteCode: chat.inviteCode });
+      if (chat) setActiveChat({ type: 'channel', ...chat, id: chat._id, memberCount: chat.members?.length || 1 });
+    } else if (userId && allUsers.length > 0) {
+      chat = allUsers.find(u => u.id === userId);
       if (chat) setActiveChat({ type: 'dm', ...chat });
+    } else if (channels.length > 0 && !channelId && !userId && activeWorkspace) {
+      navigate(`/dashboard/${activeWorkspace._id}/channel/${channels[0]._id}`, { replace: true });
     }
-  }, [channelId, userId, channels]);
+  }, [channelId, userId, channels, allUsers, activeWorkspace, navigate]);
 
   useEffect(() => {
-    if (activeChat) {
-      const messageData = initialMessages[activeChat.type]?.[activeChat.id] || [];
-      const populatedMessages = messageData.map(msg => {
-        const user = allUsers.find(u => u.id === msg.userId) || {};
-        return {
-          ...msg,
-          name: user.name || 'Unknown',
-          avatar: user.avatar || '??',
-          color: user.color || 'from-slate-500 to-slate-600',
-          status: user.status || 'offline',
-          // Ensure reactions have toggle tracking
-          reactions: Object.fromEntries(
-            Object.entries(msg.reactions || {}).map(([emoji, count]) => [emoji, { count, userReacted: false }])
-          )
-        };
-      });
-      setMessages(populatedMessages);
-    } else {
+    if (!activeChat) {
       setMessages([]);
+      return;
     }
-  }, [activeChat, currentUser]);
+    
+    // Clear messages temporarily to show crisp load
+    const fetchMsgs = async () => {
+      try {
+        let targetId = null;
 
-  const handleSendMessage = (text) => {
+        if (activeChat.type === 'channel') {
+           targetId = activeChat.id;
+        } else if (activeChat.type === 'dm') {
+          const dmRes = await channelAPI.getOrCreateDm(activeWorkspace._id, activeChat.id);
+          activeChat.channelId = dmRes._id;
+          targetId = dmRes._id;
+          
+          socketService.joinChannel(targetId);
+          setChannels(prev => {
+            if (!prev.find(c => c._id === targetId)) {
+               return [...prev, { ...dmRes, unread: 0 }];
+            }
+            return prev;
+          });
+        }
+
+        if (targetId) {
+          const res = await messageAPI.getMessages(targetId);
+          const mapped = res.messages.reverse().map(msg => ({
+            id: msg._id,
+            userId: msg.sender._id,
+            text: msg.text,
+            time: new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            reactions: {}, 
+            name: msg.sender.fullName || msg.sender.email,
+            avatar: msg.sender.avatar || 'U',
+            color: 'from-blue-500 to-cyan-500',
+          }));
+          setMessages(mapped);
+          
+          // Clear any unread notifications on opening this channel
+          setChannels(prev => prev.map(c => String(c._id) === String(targetId) ? { ...c, unread: 0 } : c));
+        }
+      } catch (err) {
+        console.error('Error fetching messages:', err);
+        setMessages([]);
+      }
+    };
+    fetchMsgs();
+  }, [activeChat]);
+
+  // Handle global socket subscriptions
+  useEffect(() => {
+    socketService.connect();
+    
+    // Join *ALL* channels we are part of so we get backgrounds notifications
+    channels.forEach(ch => socketService.joinChannel(ch._id));
+
+    const onNewMessage = (msg) => {
+      const msgChannelId = typeof msg.channel === 'object' ? msg.channel._id : msg.channel;
+      const activeChatId = activeChat?._id || activeChat?.id;
+
+      if (String(msgChannelId) === String(activeChatId)) {
+        setMessages(prev => [...prev, {
+          id: msg._id,
+          userId: msg.sender?._id || msg.sender,
+          text: msg.text,
+          time: new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          reactions: {},
+          name: msg.sender?.fullName || msg.sender?.email || 'Unknown',
+          avatar: msg.sender?.avatar || 'U',
+          color: 'from-blue-500 to-cyan-500',
+        }]);
+      } else {
+        // We received a message for a background channel! Increment its unread badge.
+        setChannels(prev => prev.map(c => 
+          String(c._id) === String(msgChannelId)
+            ? { ...c, unread: (c.unread || 0) + 1 }
+            : c
+        ));
+      }
+    };
+
+    socketService.on('new-message', onNewMessage);
+
+    return () => {
+      socketService.off('new-message', onNewMessage);
+      channels.forEach(ch => socketService.leaveChannel(ch._id));
+    };
+  }, [activeChat, channels]);
+
+  const handleSendMessage = async (text) => {
     if (text.trim() && activeChat) {
-      const newMessage = {
-        id: Date.now(),
-        userId: appUser.id,
-        text,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        reactions: {},
-        name: appUser.name,
-        avatar: appUser.avatar,
-        color: appUser.color,
-        status: appUser.status,
-      };
-      setMessages(prevMessages => [...prevMessages, newMessage]);
+      try {
+        const targetId = activeChat.type === 'channel' ? activeChat.id : activeChat.channelId;
+        if (targetId) {
+           await messageAPI.sendMessage(targetId, text);
+        }
+      } catch (err) {
+        console.error('Failed to send message:', err);
+      }
     }
   };
 
-  // Toggle reaction: add if not reacted, remove if already reacted
   const handleReaction = (messageId, emoji) => {
-    setMessages(currentMessages =>
-      currentMessages.map(msg => {
-        if (msg.id === messageId) {
-          const newReactions = { ...msg.reactions };
-          if (newReactions[emoji]) {
-            if (newReactions[emoji].userReacted) {
-              newReactions[emoji] = {
-                count: Math.max(0, newReactions[emoji].count - 1),
-                userReacted: false,
-              };
-              if (newReactions[emoji].count === 0) {
-                delete newReactions[emoji];
-              }
-            } else {
-              newReactions[emoji] = {
-                count: newReactions[emoji].count + 1,
-                userReacted: true,
-              };
-            }
-          } else {
-            newReactions[emoji] = { count: 1, userReacted: true };
-          }
-          return { ...msg, reactions: newReactions };
-        }
-        return msg;
-      })
-    );
+    // Basic local state update for now, ideally persist to backend
   };
 
   const handleSelectChannel = (channel) => {
-    navigate(`/dashboard/${activeWorkspace.id}/channel/${channel.id}`);
+    navigate(`/dashboard/${activeWorkspace._id}/channel/${channel._id}`);
   };
 
   const handleSelectUser = (user) => {
-    navigate(`/dashboard/${activeWorkspace.id}/dm/${user.id}`);
+    navigate(`/dashboard/${activeWorkspace._id}/dm/${user.id}`);
   };
 
-  const handleCreateChannel = (channelName, isPrivate) => {
-    const newChannel = {
-      id: channels.length + 1,
-      name: channelName.toLowerCase().replace(/\s+/g, '-'),
-      private: isPrivate,
-      unread: 0,
-      memberCount: 1
-    };
-    setChannels(prevChannels => [...prevChannels, newChannel]);
-    setCreateChannelModalOpen(false);
-    navigate(`/dashboard/${activeWorkspace.id}/channel/${newChannel.id}`);
+  const handleCreateChannel = async (channelName, isPrivate) => {
+    try {
+      if (!activeWorkspace) return;
+      const data = await channelAPI.create(activeWorkspace._id, {
+        name: channelName,
+        isPrivate
+      });
+      // Update local state directly to be snappy
+      setChannels(prev => [...prev, data]);
+      setCreateChannelModalOpen(false);
+      navigate(`/dashboard/${activeWorkspace._id}/channel/${data._id}`);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleJoinChannel = async (inviteCode) => {
+    try {
+      if (!activeWorkspace) return;
+      const data = await channelAPI.joinByCode(inviteCode);
+      
+      if (!channels.find(c => c._id === data._id)) {
+        setChannels(prev => [...prev, data]);
+      }
+      setCreateChannelModalOpen(false);
+      navigate(`/dashboard/${activeWorkspace._id}/channel/${data._id}`);
+    } catch (err) {
+      console.error('Failed to join channel:', err);
+      alert('Failed to join channel. Make sure the code is correct.');
+    }
   };
 
   const handleCreateDm = (user) => {
     setCreateDmModalOpen(false);
-    navigate(`/dashboard/${activeWorkspace.id}/dm/${user.id}`);
+    navigate(`/dashboard/${activeWorkspace._id}/dm/${user.id}`);
   };
 
   const handleLogout = () => {
@@ -171,7 +265,19 @@ const DashboardPage = () => {
 
   const handleSwitchWorkspace = (ws) => {
     setActiveWorkspace(ws);
-    navigate(`/dashboard/${ws.id}/channel/1`);
+    navigate(`/dashboard/${ws._id}`);
+  };
+
+  if (!activeWorkspace || !currentUser) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-slate-100 dark:bg-[#222831]">
+        <div className="w-8 h-8 border-4 border-blue-500 rounded-full border-t-transparent animate-spin"></div>
+      </div>
+    );
+  }
+
+  const appUser = allUsers.find(u => u.id === currentUser._id) || {
+    id: currentUser._id, name: currentUser.fullName || currentUser.displayName || 'You', avatar: 'U', color: 'from-blue-500 to-cyan-500', status: 'online'
   };
 
   return (
@@ -189,18 +295,18 @@ const DashboardPage = () => {
           </svg>
         </button>
         <div className="w-8 border-t border-slate-600 dark:border-[#76ABAE]/20 my-1"></div>
-        {sampleWorkspaces.map((ws) => (
+        {workspaces.map((ws) => (
           <button
-            key={ws.id}
+            key={ws._id}
             onClick={() => handleSwitchWorkspace(ws)}
             className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white font-bold text-sm shadow-lg transition-all hover:rounded-xl ${
-              activeWorkspace.id === ws.id
-                ? `bg-gradient-to-br ${ws.color} ring-2 ring-white/30`
-                : 'bg-slate-700 dark:bg-[#31363F] hover:bg-gradient-to-br hover:' + ws.color + ' opacity-60 hover:opacity-100'
+              activeWorkspace._id === ws._id
+                ? `bg-gradient-to-br from-blue-500 to-cyan-500 ring-2 ring-white/30`
+                : 'bg-slate-700 dark:bg-[#31363F] hover:bg-gradient-to-br hover:from-blue-500 hover:to-cyan-500 opacity-60 hover:opacity-100'
             }`}
             title={ws.name}
           >
-            {ws.abbr}
+            {(ws.icon || ws.name.substring(0, 2)).toUpperCase()}
           </button>
         ))}
         <div className="w-8 border-t border-slate-600 dark:border-[#76ABAE]/20 my-1"></div>
@@ -252,12 +358,12 @@ const DashboardPage = () => {
               </button>
             </div>
             <div className="space-y-0.5">
-              {channels.map((channel) => (
+              {channels.filter(c => !c.name.startsWith('DM-')).map((channel) => (
                 <button
-                  key={channel.id}
+                  key={channel._id}
                   onClick={() => handleSelectChannel(channel)}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all group ${
-                    activeChat && activeChat.type === 'channel' && activeChat.id === channel.id
+                    activeChat && activeChat.type === 'channel' && activeChat.id === channel._id
                       ? 'bg-blue-500 dark:bg-[#76ABAE]/30 text-white'
                       : 'text-blue-100 dark:text-[#EEEEEE]/70 hover:bg-blue-500/60 dark:hover:bg-[#31363F]'
                   }`}
@@ -271,8 +377,8 @@ const DashboardPage = () => {
                     <span className="text-sm font-medium">{channel.name}</span>
                   </div>
                   {channel.unread > 0 && (
-                    <span className="px-2 py-0.5 bg-red-500 text-white text-xs font-bold rounded-full">
-                      {channel.unread}
+                    <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full shadow-sm">
+                      {channel.unread > 9 ? '9+' : channel.unread}
                     </span>
                   )}
                 </button>
@@ -358,6 +464,7 @@ const DashboardPage = () => {
         isOpen={isCreateChannelModalOpen}
         onClose={() => setCreateChannelModalOpen(false)}
         onCreateChannel={handleCreateChannel}
+        onJoinChannel={handleJoinChannel}
       />
       <CreateDirectMessageModal
         isOpen={isCreateDmModalOpen}
@@ -368,7 +475,7 @@ const DashboardPage = () => {
       <AddMemberModal
         isOpen={isAddMemberModalOpen}
         onClose={() => setAddMemberModalOpen(false)}
-        workspaceId={activeWorkspace.id}
+        workspaceId={activeWorkspace._id}
       />
 
       {/* Right Sidebar - Online Users */}

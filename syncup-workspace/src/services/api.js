@@ -1,75 +1,178 @@
-// Search API using actual mockData instead of separate mock arrays
-import { users, channels, messages } from '../data/mockData';
+// Frontend API service layer replacing mockData.js
 
-/**
- * Searches channels, users, and messages from the actual mock data.
- * @param {string} query The search query.
- * @returns {Promise<object>} A promise that resolves to the search results.
- */
-export const searchApi = async (query) => {
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 300));
+// Using native fetch API for maximum compatibility. 
+// Note: Interceptors logic handles JSON unwrapping naturally.
 
-  if (!query) {
-    return { channels: [], users: [], messages: [] };
-  }
+const BASE_URL = '/api';
 
-  const lowerCaseQuery = query.toLowerCase();
+const defaultHeaders = {
+  'Content-Type': 'application/json',
+};
 
-  // Search channels by name
-  const matchedChannels = channels.filter(c =>
-    c.name.toLowerCase().includes(lowerCaseQuery)
-  );
-
-  // Search users by name
-  const matchedUsers = users.filter(u =>
-    u.name.toLowerCase().includes(lowerCaseQuery)
-  );
-
-  // Search messages across all channels and DMs
-  const matchedMessages = [];
-
-  // Search channel messages
-  if (messages.channel) {
-    Object.entries(messages.channel).forEach(([channelId, msgs]) => {
-      msgs.forEach(msg => {
-        if (msg.text && msg.text.toLowerCase().includes(lowerCaseQuery)) {
-          const sender = users.find(u => u.id === msg.userId);
-          matchedMessages.push({
-            id: msg.id,
-            text: msg.text,
-            channelId: parseInt(channelId),
-            senderName: sender?.name || 'Unknown',
-            time: msg.time,
-            type: 'channel',
-          });
-        }
-      });
-    });
-  }
-
-  // Search DM messages
-  if (messages.dm) {
-    Object.entries(messages.dm).forEach(([dmUserId, msgs]) => {
-      msgs.forEach(msg => {
-        if (msg.text && msg.text.toLowerCase().includes(lowerCaseQuery)) {
-          const sender = users.find(u => u.id === msg.userId);
-          matchedMessages.push({
-            id: msg.id,
-            text: msg.text,
-            dmUserId: parseInt(dmUserId),
-            senderName: sender?.name || 'Unknown',
-            time: msg.time,
-            type: 'dm',
-          });
-        }
-      });
-    });
-  }
-
-  return {
-    channels: matchedChannels,
-    users: matchedUsers,
-    messages: matchedMessages,
+// Generic fetch wrapper to handle errors and JSON parsing uniformly
+async function fetchClient(endpoint, options = {}) {
+  const url = `${BASE_URL}${endpoint}`;
+  
+  const config = {
+    ...options,
+    headers: {
+      ...defaultHeaders,
+      ...options.headers,
+    },
   };
+
+  // If we're sending FormData (like file uploads), remove Content-Type 
+  // so fetch can auto-set the correct boundary
+  if (options.body instanceof FormData) {
+    delete config.headers['Content-Type'];
+  }
+
+  try {
+    const response = await fetch(url, config);
+    
+    // Attempt to parse JSON response
+    let data;
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      data = await response.text();
+    }
+
+    if (!response.ok) {
+      throw new Error(data.message || `API Error: ${response.status} ${response.statusText}`);
+    }
+
+    return data;
+  } catch (error) {
+    console.error(`API Request failed for ${endpoint}:`, error);
+    throw error;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Auth API
+// -----------------------------------------------------------------------------
+export const authAPI = {
+  register: (userData) => fetchClient('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(userData),
+  }),
+  
+  login: (credentials) => fetchClient('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(credentials),
+  }),
+  
+  logout: () => fetchClient('/auth/logout', {
+    method: 'POST',
+  }),
+  
+  getMe: () => fetchClient('/auth/me', {
+    method: 'GET',
+  }),
+};
+
+// -----------------------------------------------------------------------------
+// Workspace API
+// -----------------------------------------------------------------------------
+export const workspaceAPI = {
+  getAll: () => fetchClient('/workspaces', { method: 'GET' }),
+  
+  getById: (id) => fetchClient(`/workspaces/${id}`, { method: 'GET' }),
+  
+  create: (data) => fetchClient('/workspaces', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  
+  joinByCode: (code) => fetchClient(`/workspaces/join/${code}`, {
+    method: 'POST',
+  }),
+  
+  addMember: (workspaceId, userId) => fetchClient(`/workspaces/${workspaceId}/members`, {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  }),
+};
+
+// -----------------------------------------------------------------------------
+// Channel API
+// -----------------------------------------------------------------------------
+export const channelAPI = {
+  getAll: (workspaceId) => fetchClient(`/workspaces/${workspaceId}/channels`, { method: 'GET' }),
+  
+  getById: (channelId) => fetchClient(`/channels/${channelId}`, { method: 'GET' }),
+  
+  create: (workspaceId, data) => fetchClient(`/workspaces/${workspaceId}/channels`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  
+  joinByCode: (code) => fetchClient(`/channels/join/${code}`, {
+    method: 'POST',
+  }),
+  
+  getOrCreateDm: (workspaceId, userId) => fetchClient(`/workspaces/${workspaceId}/channels/dm/${userId}`, {
+    method: 'POST',
+  }),
+  
+  addMember: (channelId, userId) => fetchClient(`/channels/${channelId}/members`, {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  }),
+};
+
+// -----------------------------------------------------------------------------
+// Message API
+// -----------------------------------------------------------------------------
+export const messageAPI = {
+  getMessages: (channelId, page = 1, limit = 50) => 
+    fetchClient(`/channels/${channelId}/messages?page=${page}&limit=${limit}`, { method: 'GET' }),
+  
+  sendMessage: async (channelId, text, file = null) => {
+    let fileData = {};
+    
+    if (file) {
+      const formData = new FormData();
+      formData.append('file', file);
+      const uploadRes = await fetchClient('/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      fileData = uploadRes;
+    }
+    
+    return fetchClient(`/channels/${channelId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({
+        text,
+        fileUrl: fileData.fileUrl,
+        fileType: fileData.fileType,
+        fileName: fileData.fileName,
+      }),
+    });
+  },
+};
+
+// -----------------------------------------------------------------------------
+// User API
+// -----------------------------------------------------------------------------
+export const userAPI = {
+  search: (query) => fetchClient(`/users/search?q=${query}`, { method: 'GET' }),
+  
+  updateProfile: (id, data) => fetchClient(`/users/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  }),
+  
+  uploadAvatar: (id, file) => {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    
+    return fetchClient(`/users/${id}/avatar`, {
+      method: 'POST',
+      body: formData,
+    });
+  },
 };

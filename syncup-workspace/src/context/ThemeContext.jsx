@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { authAPI, userAPI } from '../services/api';
 
 const ThemeContext = createContext();
 
@@ -13,31 +14,10 @@ const DEFAULT_SETTINGS = {
   timezone: 'Pacific Time (PT)',
 };
 
-const DEFAULT_USER = {
-  id: 6,
-  firstName: 'John',
-  lastName: 'Doe',
-  displayName: 'John Doe',
-  email: 'john@company.com',
-  bio: '',
-  phone: '',
-  avatar: 'JD',
-  color: 'from-pink-500 to-rose-500',
-  status: 'online',
-};
-
 export const ThemeProvider = ({ children }) => {
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem('syncup_darkMode');
     return saved ? JSON.parse(saved) : false;
-  });
-
-  const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem('syncup_currentUser');
-    if (saved) {
-      try { return { ...DEFAULT_USER, ...JSON.parse(saved) }; } catch { return DEFAULT_USER; }
-    }
-    return DEFAULT_USER;
   });
 
   const [settings, setSettings] = useState(() => {
@@ -47,6 +27,9 @@ export const ThemeProvider = ({ children }) => {
     }
     return DEFAULT_SETTINGS;
   });
+
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
   // Sync dark mode class
   useEffect(() => {
@@ -60,14 +43,6 @@ export const ThemeProvider = ({ children }) => {
 
   const toggleDarkMode = () => setDarkMode(prev => !prev);
 
-  const updateUser = (fields) => {
-    setCurrentUser(prev => {
-      const updated = { ...prev, ...fields };
-      localStorage.setItem('syncup_currentUser', JSON.stringify(updated));
-      return updated;
-    });
-  };
-
   const updateSettings = (fields) => {
     setSettings(prev => {
       const updated = { ...prev, ...fields };
@@ -76,23 +51,78 @@ export const ThemeProvider = ({ children }) => {
     });
   };
 
-  const logout = () => {
-    localStorage.removeItem('syncup_currentUser');
-    setCurrentUser(DEFAULT_USER);
+  // Check auth status on mount
+  useEffect(() => {
+    const checkAuthStatus = async () => {
+      try {
+        const userData = await authAPI.getMe();
+        setCurrentUser(userData);
+      } catch (error) {
+        console.log("No active session");
+        setCurrentUser(null);
+      } finally {
+        setAuthLoading(false);
+      }
+    };
+    checkAuthStatus();
+  }, []);
+
+  const login = async (credentials) => {
+    try {
+      const data = await authAPI.login(credentials);
+      setCurrentUser(data.user);
+      return data;
+    } catch (error) {
+      throw error;
+    }
   };
 
-  const login = (userData) => {
-    const user = { ...DEFAULT_USER, ...userData };
-    setCurrentUser(user);
-    localStorage.setItem('syncup_currentUser', JSON.stringify(user));
+  const register = async (userData) => {
+    try {
+      const data = await authAPI.register(userData);
+      setCurrentUser(data.user);
+      return data;
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await authAPI.logout();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCurrentUser(null);
+    }
+  };
+
+  const updateUser = async (id, fields) => {
+    try {
+      const updatedUser = await userAPI.updateProfile(id, fields);
+      setCurrentUser(updatedUser);
+      return updatedUser;
+    } catch (error) {
+      throw error;
+    }
+  };
+  
+  const uploadAvatar = async (id, file) => {
+    try {
+      const result = await userAPI.uploadAvatar(id, file);
+      setCurrentUser(prev => ({...prev, avatar: result.avatar}));
+      return result;
+    } catch (error) {
+      throw error;
+    }
   };
 
   return (
     <ThemeContext.Provider value={{
       darkMode, toggleDarkMode,
-      currentUser, updateUser,
       settings, updateSettings,
-      logout, login,
+      currentUser, setCurrentUser, authLoading,
+      login, register, logout, updateUser, uploadAvatar
     }}>
       {children}
     </ThemeContext.Provider>

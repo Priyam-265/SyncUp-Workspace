@@ -1,52 +1,58 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
+import { workspaceAPI } from '../services/api';
+import { useTheme } from './ThemeContext';
 
 const WorkspaceContext = createContext();
 
-const generateCode = () => Math.random().toString(36).substring(2, 10).toUpperCase();
-
 export const WorkspaceProvider = ({ children }) => {
-  // Map of invite code -> workspaceId, stored in state (and localStorage for persistence)
-  const [inviteCodes, setInviteCodes] = useState(() => {
-    try {
-      const saved = localStorage.getItem('syncup_inviteCodes');
-      return saved ? JSON.parse(saved) : {};
-    } catch {
-      return {};
-    }
-  });
+  const { currentUser } = useTheme();
+  const [workspaces, setWorkspaces] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  const persistCodes = (codes) => {
-    setInviteCodes(codes);
-    localStorage.setItem('syncup_inviteCodes', JSON.stringify(codes));
+  const fetchWorkspaces = useCallback(async () => {
+    if (!currentUser) return;
+    setLoading(true);
+    try {
+      const data = await workspaceAPI.getAll();
+      setWorkspaces(data);
+    } catch (error) {
+      console.error("Failed to fetch workspaces:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser]);
+
+  const createWorkspace = async (workspaceData) => {
+    try {
+      const newWorkspace = await workspaceAPI.create(workspaceData);
+      setWorkspaces(prev => [...prev, newWorkspace]);
+      return newWorkspace;
+    } catch (error) {
+      throw error;
+    }
   };
 
-  // Generate an invite code for a workspace and store it
-  const createInvite = useCallback((workspaceId) => {
-    const code = generateCode();
-    const link = `https://syncup.io/join/${code}`;
-    setInviteCodes(prev => {
-      const updated = { ...prev, [code]: workspaceId };
-      localStorage.setItem('syncup_inviteCodes', JSON.stringify(updated));
-      return updated;
-    });
-    return { code, link };
-  }, []);
-
-  // Look up a workspace ID from an invite code or link
-  const resolveInvite = useCallback((input) => {
-    const trimmed = input.trim();
-    // Extract code from link if needed
-    let code = trimmed;
-    if (trimmed.startsWith('http')) {
-      const parts = trimmed.split('/');
-      code = parts[parts.length - 1];
+  const joinWorkspace = async (code) => {
+    try {
+      const workspace = await workspaceAPI.joinByCode(code);
+      // Update workspace list if newly joined
+      if (!workspaces.find(w => w._id === workspace._id)) {
+        setWorkspaces(prev => [...prev, workspace]);
+      }
+      return workspace;
+    } catch (error) {
+      throw error;
     }
-    code = code.toUpperCase();
-    return inviteCodes[code] || null;
-  }, [inviteCodes]);
+  };
 
   return (
-    <WorkspaceContext.Provider value={{ inviteCodes, createInvite, resolveInvite }}>
+    <WorkspaceContext.Provider value={{ 
+      workspaces, 
+      loading, 
+      fetchWorkspaces,
+      createWorkspace,
+      joinWorkspace
+    }}>
       {children}
     </WorkspaceContext.Provider>
   );
