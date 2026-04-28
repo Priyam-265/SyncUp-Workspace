@@ -1,27 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { userAPI } from '../services/api';
-import { Search, Loader, X, Hash, User, MessageSquare } from 'lucide-react';
+import { userAPI, channelAPI } from '../services/api';
+import { Search, Loader, Hash, MessageSquare } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 const useDebounce = (value, delay) => {
   const [debouncedValue, setDebouncedValue] = useState(value);
-
   useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value);
-    }, delay);
-
-    return () => {
-      clearTimeout(handler);
-    };
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
   }, [value, delay]);
-
   return debouncedValue;
 };
 
 const SearchBar = () => {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState({ channels: [], users: [], messages: [] });
+  const [results, setResults] = useState({ channels: [], users: [] });
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const debouncedQuery = useDebounce(query, 300);
@@ -32,31 +25,41 @@ const SearchBar = () => {
   const wsId = workspaceId || '1';
 
   useEffect(() => {
-    if (debouncedQuery) {
-      setIsLoading(true);
-      userAPI.search(debouncedQuery).then(data => {
-        setResults({ channels: [], users: Array.isArray(data) ? data : [], messages: [] });
-        setIsLoading(false);
-      }).catch(err => {
-        console.error(err);
-        setResults({ channels: [], users: [], messages: [] });
-        setIsLoading(false);
-      });
-    } else {
-      setResults({ channels: [], users: [], messages: [] });
+    if (!debouncedQuery.trim()) {
+      setResults({ channels: [], users: [] });
+      return;
     }
-  }, [debouncedQuery]);
+
+    setIsLoading(true);
+    const q = debouncedQuery.toLowerCase();
+
+    Promise.allSettled([
+      userAPI.search(debouncedQuery),
+      channelAPI.getAll(wsId),
+    ]).then(([usersRes, channelsRes]) => {
+      const users = usersRes.status === 'fulfilled' && Array.isArray(usersRes.value)
+        ? usersRes.value
+        : [];
+
+      const allChannels = channelsRes.status === 'fulfilled' && Array.isArray(channelsRes.value)
+        ? channelsRes.value
+        : [];
+
+      const channels = allChannels.filter(c =>
+        c.name?.toLowerCase().includes(q)
+      );
+
+      setResults({ users, channels });
+      setIsLoading(false);
+    });
+  }, [debouncedQuery, wsId]);
 
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (searchRef.current && !searchRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
+    const handleClickOutside = (e) => {
+      if (searchRef.current && !searchRef.current.contains(e.target)) setIsOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const handleResultClick = (path) => {
@@ -64,6 +67,8 @@ const SearchBar = () => {
     setIsOpen(false);
     setQuery('');
   };
+
+  const hasResults = results.channels.length > 0 || results.users.length > 0;
 
   return (
     <div className="relative w-full max-w-xs" ref={searchRef}>
@@ -85,67 +90,50 @@ const SearchBar = () => {
             <div className="flex items-center justify-center p-4">
               <Loader className="w-6 h-6 text-blue-500 animate-spin" />
             </div>
+          ) : hasResults ? (
+            <div>
+              {results.channels.length > 0 && (
+                <div className="p-2">
+                  <h3 className="text-xs font-semibold text-slate-400 uppercase px-2 mb-1">Channels</h3>
+                  <ul>
+                    {results.channels.map(channel => (
+                      <li
+                        key={`ch-${channel._id || channel.id}`}
+                        onClick={() => handleResultClick(`/dashboard/${wsId}/channel/${channel._id || channel.id}`)}
+                        className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+                      >
+                        <Hash className="w-4 h-4 text-slate-500" />
+                        <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{channel.name}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {results.users.length > 0 && (
+                <div className="p-2">
+                  <h3 className="text-xs font-semibold text-slate-400 uppercase px-2 mb-1">Users</h3>
+                  <ul>
+                    {results.users.map(user => (
+                      <li
+                        key={`usr-${user._id}`}
+                        onClick={() => handleResultClick(`/dashboard/${wsId}/dm/${user._id}`)}
+                        className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+                      >
+                        <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-[10px]">
+                          {user.avatar || (user.fullName?.[0] || user.email?.[0] || 'U').toUpperCase()}
+                        </div>
+                        <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                          {user.fullName || user.email}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           ) : (
-            (results.channels.length > 0 || results.users.length > 0 || results.messages.length > 0) ? (
-              <div>
-                {results.channels.length > 0 && (
-                  <div className="p-2">
-                    <h3 className="text-xs font-semibold text-slate-400 uppercase px-2 mb-1">Channels</h3>
-                    <ul>
-                      {results.channels.map(channel => (
-                        <li key={`ch-${channel.id}`} onClick={() => handleResultClick(`/dashboard/${wsId}/channel/${channel.id}`)} className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer">
-                          <Hash className="w-4 h-4 text-slate-500" />
-                          <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{channel.name}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {results.users.length > 0 && (
-                  <div className="p-2">
-                    <h3 className="text-xs font-semibold text-slate-400 uppercase px-2 mb-1">Users</h3>
-                    <ul>
-                      {results.users.map(user => (
-                        <li key={`usr-${user._id}`} onClick={() => handleResultClick(`/dashboard/${wsId}/dm/${user._id}`)} className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer">
-                          <div className={`w-6 h-6 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-[10px]`}>
-                            {user.avatar || 'U'}
-                          </div>
-                          <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{user.fullName || user.email}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {results.messages.length > 0 && (
-                  <div className="p-2">
-                    <h3 className="text-xs font-semibold text-slate-400 uppercase px-2 mb-1">Messages</h3>
-                    <ul>
-                      {results.messages.map(message => (
-                        <li
-                          key={`msg-${message.type}-${message.id}-${message.channelId || message.dmUserId}`}
-                          onClick={() => {
-                            if (message.type === 'channel') {
-                              handleResultClick(`/dashboard/${wsId}/channel/${message.channelId}`);
-                            } else {
-                              handleResultClick(`/dashboard/${wsId}/dm/${message.dmUserId}`);
-                            }
-                          }}
-                          className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
-                        >
-                          <MessageSquare className="w-4 h-4 text-slate-500 flex-shrink-0" />
-                          <div className="min-w-0">
-                            <span className="text-sm text-slate-600 dark:text-slate-400 truncate block">{message.text}</span>
-                            <span className="text-xs text-slate-400 dark:text-slate-500">{message.senderName} · {message.time}</span>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            ) : (
-              query && <p className="p-4 text-sm text-slate-500">No results found for "{query}"</p>
-            )
+            query && <p className="p-4 text-sm text-slate-500">No results found for "{query}"</p>
           )}
         </div>
       )}
