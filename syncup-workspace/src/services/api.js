@@ -1,7 +1,6 @@
 // Frontend API service layer
 
-const BASE_URL = '/api';
-
+const BASE_URL = `${import.meta.env.VITE_API_URL}/api`;
 const defaultHeaders = {
   'Content-Type': 'application/json',
 };
