@@ -39,6 +39,7 @@ const DashboardPage = () => {
   const prevChannelId = useRef(null);
   const prevUserId = useRef(null);
   const prevJoinedChannelRef = useRef(null);
+  const messagesCache = useRef({}); // { [targetId]: messages[] }
 
   // Effect 1: Fetch workspaces
   useEffect(() => {
@@ -86,7 +87,11 @@ const DashboardPage = () => {
         if (!mappedMembers.find(m => m.id === appUser.id)) {
           mappedMembers.push(appUser);
         }
-        setAllUsers(mappedMembers);
+        setAllUsers(prev => {
+          const unreadMap = {};
+          prev.forEach(u => { if (u.unread) unreadMap[u.id] = u.unread; });
+          return mappedMembers.map(u => ({ ...u, unread: unreadMap[u.id] || 0 }));
+        });
       }
     }
   }, [workspaceId, workspaces, currentUser]);
@@ -138,8 +143,13 @@ const DashboardPage = () => {
     prevChannelId.current = channelId;
     prevUserId.current = userId;
 
-    // Clear messages immediately to prevent stale content flash
-    setMessages([]);
+    // Clear messages immediately OR use cache to prevent stale content flash
+    const targetIdTemp = channelId || dmChannelIdRef.current;
+    if (targetIdTemp && messagesCache.current[targetIdTemp]) {
+      setMessages(messagesCache.current[targetIdTemp]);
+    } else {
+      setMessages([]);
+    }
 
     // Leave previous channel room
     if (prevJoinedChannelRef.current) {
@@ -173,6 +183,7 @@ const DashboardPage = () => {
           const res = await messageAPI.getMessages(targetId);
           if (cancelled) return;
           const mapped = (res.messages || []).reverse().map(msg => mapMessage(msg, currentUser._id));
+          messagesCache.current[targetId] = mapped;
           setMessages(mapped);
         }
       } catch (err) {
@@ -198,11 +209,27 @@ const DashboardPage = () => {
       const msgChId = typeof msg.channel === 'object' ? msg.channel._id : msg.channel;
       const curTarget = currentTargetIdRef.current;
 
+      const mapped = mapMessage(msg, currentUser?._id);
+      
+      if (messagesCache.current[msgChId]) {
+        if (!messagesCache.current[msgChId].some(m => m.id === msg._id)) {
+          messagesCache.current[msgChId] = [...messagesCache.current[msgChId], mapped];
+        }
+      } else {
+        messagesCache.current[msgChId] = [mapped];
+      }
+
       if (String(msgChId) === String(curTarget)) {
         setMessages(prev => {
-          // Deduplicate
+          // Replace optimistic message if it exists, otherwise add new
+          const existingOptIdx = prev.findIndex(m => m.isOptimistic && m.text === mapped.text);
+          if (existingOptIdx !== -1) {
+            const newArr = [...prev];
+            newArr[existingOptIdx] = mapped;
+            return newArr;
+          }
           if (prev.some(m => m.id === msg._id)) return prev;
-          return [...prev, mapMessage(msg, currentUser?._id)];
+          return [...prev, mapped];
         });
       } else {
         setChannels(prev => prev.map(c =>
@@ -221,12 +248,17 @@ const DashboardPage = () => {
 
     const onMessageDeleted = ({ messageId }) => {
       setMessages(prev => prev.filter(m => m.id !== messageId));
+      Object.keys(messagesCache.current).forEach(chId => {
+        messagesCache.current[chId] = messagesCache.current[chId].filter(m => m.id !== messageId);
+      });
     };
 
     const onReactionUpdated = ({ messageId, reactions }) => {
-      setMessages(prev => prev.map(m =>
-        m.id === messageId ? { ...m, reactions: formatReactions(reactions, currentUser?._id) } : m
-      ));
+      const formatted = formatReactions(reactions, currentUser?._id);
+      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, reactions: formatted } : m));
+      Object.keys(messagesCache.current).forEach(chId => {
+        messagesCache.current[chId] = messagesCache.current[chId].map(m => m.id === messageId ? { ...m, reactions: formatted } : m);
+      });
     };
 
     socketService.on('new-message', onNewMessage);
@@ -245,12 +277,27 @@ const DashboardPage = () => {
     try {
       const targetId = channelId || dmChannelIdRef.current;
       if (targetId) {
-        await messageAPI.sendMessage(targetId, text);
+        const tempId = `temp-${Date.now()}`;
+        const tempMsg = {
+          id: tempId, odId: tempId, text, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          reactions: {}, name: currentUser.fullName || 'You', avatar: (currentUser.fullName || 'U').substring(0, 2).toUpperCase(),
+          avatarUrl: currentUser.avatar || '', color: 'from-pink-500 to-rose-500', userId: currentUser._id, isOptimistic: true
+        };
+        setMessages(prev => [...prev, tempMsg]);
+        
+        const actualMsg = await messageAPI.sendMessage(targetId, text);
+        const mapped = mapMessage(actualMsg, currentUser._id);
+        setMessages(prev => prev.map(m => m.id === tempId ? mapped : m));
+        
+        if (messagesCache.current[targetId]) {
+          messagesCache.current[targetId] = messagesCache.current[targetId].filter(m => m.id !== tempId);
+          messagesCache.current[targetId].push(mapped);
+        }
       }
     } catch (err) {
       console.error('Failed to send message:', err);
     }
-  }, [channelId]);
+  }, [channelId, currentUser]);
 
   const handleReaction = useCallback(async (messageId, emoji) => {
     try {
@@ -362,11 +409,19 @@ const DashboardPage = () => {
           <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-slate-400 dark:text-[#76ABAE] group-hover:text-white transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
         </button>
         <div className="w-8 border-t border-slate-600 dark:border-[#76ABAE]/20 my-1"></div>
-        {workspaces.map((ws) => (
-          <button key={ws._id} onClick={() => handleSwitchWorkspace(ws)} className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white font-bold text-sm shadow-lg transition-all hover:rounded-xl ${activeWorkspace._id === ws._id ? 'bg-gradient-to-br from-blue-500 to-cyan-500 ring-2 ring-white/30' : 'bg-slate-700 dark:bg-[#31363F] hover:bg-gradient-to-br hover:from-blue-500 hover:to-cyan-500 opacity-60 hover:opacity-100'}`} title={ws.name}>
+        {workspaces.map((ws) => {
+          const isActive = activeWorkspace._id === ws._id;
+          const totalUnread = isActive ? (channels.reduce((s, c) => s + (c.unread || 0), 0) + allUsers.reduce((s, u) => s + (u.unread || 0), 0)) : 0;
+          return (
+          <button key={ws._id} onClick={() => handleSwitchWorkspace(ws)} className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white font-bold text-sm shadow-lg transition-all hover:rounded-xl relative ${isActive ? 'bg-gradient-to-br from-blue-500 to-cyan-500 ring-2 ring-white/30' : 'bg-slate-700 dark:bg-[#31363F] hover:bg-gradient-to-br hover:from-blue-500 hover:to-cyan-500 opacity-60 hover:opacity-100'}`} title={ws.name}>
             {(ws.icon || ws.name.substring(0, 2)).toUpperCase()}
+            {totalUnread > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full shadow-md">
+                {totalUnread > 9 ? '9+' : totalUnread}
+              </span>
+            )}
           </button>
-        ))}
+        )})}
         <div className="w-8 border-t border-slate-600 dark:border-[#76ABAE]/20 my-1"></div>
         <button onClick={() => navigate('/workspaces')} className="w-12 h-12 rounded-2xl bg-slate-800 dark:bg-[#31363F] hover:bg-slate-700 dark:hover:bg-[#76ABAE]/20 flex items-center justify-center transition-all hover:rounded-xl">
           <Plus className="w-5 h-5 text-slate-400 dark:text-[#76ABAE]" />
