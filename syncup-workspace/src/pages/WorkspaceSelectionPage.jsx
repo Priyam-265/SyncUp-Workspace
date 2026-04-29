@@ -529,8 +529,12 @@ const WorkspaceSelectionPage = () => {
                   className="workspace-card group bg-white/90 dark:bg-[#31363F]/85 backdrop-blur-xl rounded-[1.5rem] p-6 border border-slate-200/50 dark:border-[#76ABAE]/20 hover:shadow-2xl hover:shadow-blue-500/10 dark:hover:shadow-[#76ABAE]/10 transition-shadow duration-300 text-left"
                 >
                   <div className="flex items-start justify-between mb-4">
-                    <div className={`card-icon w-14 h-14 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center text-2xl shadow-lg`}>
-                      {workspace.icon || '🏢'}
+                    <div className={`card-icon w-14 h-14 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center text-2xl shadow-lg overflow-hidden`}>
+                      {workspace.icon && (workspace.icon.startsWith('http') || workspace.icon.startsWith('data:')) ? (
+                        <img src={workspace.icon} alt={workspace.name} className="w-full h-full object-cover" />
+                      ) : (
+                        workspace.icon || '🏢'
+                      )}
                     </div>
                     <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-[#EEEEEE]/50 font-medium">
                       <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
