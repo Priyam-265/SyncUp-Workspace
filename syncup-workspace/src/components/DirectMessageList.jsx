@@ -1,5 +1,6 @@
 import React from 'react';
 import { ChevronDown, Plus } from 'lucide-react';
+import UserAvatar from './UserAvatar';
 
 const DirectMessageList = ({ users, onSelectUser, activeChat, onOpenCreateDmModal }) => {
   return (
@@ -25,10 +26,8 @@ const DirectMessageList = ({ users, onSelectUser, activeChat, onOpenCreateDmModa
             }`}
           >
             <div className="relative">
-              <div className={`w-7 h-7 bg-gradient-to-br ${user.color} rounded-lg flex items-center justify-center text-white text-xs font-bold`}>
-                {user.avatar}
-              </div>
-              <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 ${user.status === 'online' ? 'bg-green-500' : 'bg-yellow-500'} border-2 border-blue-600 dark:border-[#222831] rounded-full`}></div>
+              <UserAvatar avatarUrl={user.avatarUrl} initials={user.avatar} color={user.color} size="w-7 h-7" textSize="text-xs" />
+              <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 ${user.status === 'online' ? 'bg-green-500' : user.status === 'away' ? 'bg-yellow-500' : 'bg-slate-400'} border-2 border-blue-600 dark:border-[#222831] rounded-full`}></div>
             </div>
             <span className="text-sm font-medium">{user.name}</span>
           </button>

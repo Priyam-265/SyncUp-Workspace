@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Hash, Lock, Settings, MoreVertical, Plus, ChevronDown, Moon, Sun, LogOut, UserPlus
+  Hash, Lock, Settings, MoreVertical, Plus, ChevronDown, Moon, Sun, LogOut, UserPlus, Copy, Check
 } from 'lucide-react';
 import SearchBar from '../components/SearchBar';
 import DirectMessageList from '../components/DirectMessageList';
@@ -9,6 +9,7 @@ import ChatView from '../components/ChatView';
 import CreateChannelModal from '../components/CreateChannelModal';
 import CreateDirectMessageModal from '../components/CreateDirectMessageModal';
 import AddMemberModal from '../components/AddMemberModal';
+import UserAvatar from '../components/UserAvatar';
 import { useTheme } from '../context/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { messageAPI, channelAPI } from '../services/api';
@@ -29,6 +30,8 @@ const DashboardPage = () => {
   const [isCreateDmModalOpen, setCreateDmModalOpen] = useState(false);
   const [isAddMemberModalOpen, setAddMemberModalOpen] = useState(false);
   const [activeWorkspace, setActiveWorkspace] = useState(null);
+  const [showInviteCode, setShowInviteCode] = useState(false);
+  const [copiedInvite, setCopiedInvite] = useState(false);
 
   // Refs to avoid stale closures and prevent re-render loops
   const dmChannelIdRef = useRef(null);
@@ -48,24 +51,35 @@ const DashboardPage = () => {
       const ws = workspaces.find(w => w._id === workspaceId) || workspaces[0];
       if (ws) {
         setActiveWorkspace(ws);
-        setChannels(ws.channels || []);
+        // Merge channels from workspace but preserve existing unread counts
+        setChannels(prev => {
+          const newChannels = ws.channels || [];
+          if (prev.length === 0) return newChannels;
+          // Carry forward unread counts from previous state
+          const unreadMap = {};
+          prev.forEach(c => { if (c.unread) unreadMap[c._id] = c.unread; });
+          return newChannels.map(c => ({ ...c, unread: unreadMap[c._id] || 0 }));
+        });
 
         const appUser = {
           id: currentUser._id,
           name: currentUser.displayName || currentUser.fullName || 'You',
           avatar: (currentUser.displayName || currentUser.fullName || 'Y').substring(0, 2).toUpperCase(),
+          avatarUrl: currentUser.avatar || '',
           color: 'from-pink-500 to-rose-500',
           status: currentUser.status || 'online',
         };
 
         const mappedMembers = (ws.members || []).map(m => {
           if (m._id === currentUser._id) return appUser;
+          const isUrl = m.avatar && (m.avatar.startsWith('http') || m.avatar.startsWith('data:'));
           return {
             id: m._id,
             name: m.fullName || m.displayName || m.email,
-            avatar: m.avatar || (m.fullName || 'U').substring(0, 2).toUpperCase(),
+            avatar: isUrl ? (m.fullName || 'U').substring(0, 2).toUpperCase() : (m.avatar || (m.fullName || 'U').substring(0, 2).toUpperCase()),
+            avatarUrl: isUrl ? m.avatar : '',
             color: 'from-blue-500 to-cyan-500',
-            status: m.status || 'online',
+            status: m.status || 'offline',
           };
         });
 
@@ -81,7 +95,7 @@ const DashboardPage = () => {
   useEffect(() => {
     if (!activeWorkspace || !currentUser) return;
     socketService.connect();
-    socketService.joinWorkspace(activeWorkspace._id);
+    socketService.emit('join-workspace', { workspaceId: activeWorkspace._id, userId: currentUser._id });
     socketService.emit('user-online', { userId: currentUser._id, workspaceId: activeWorkspace._id });
 
     const onPresenceChange = ({ userId: uid, status }) => {
@@ -172,9 +186,13 @@ const DashboardPage = () => {
   }, [channelId, userId, activeWorkspace?._id, currentUser?._id]);
 
   // Effect 6: Socket listeners for real-time messages, deletions, reactions
+  // Also join ALL channels so we receive background messages for unread counts
   useEffect(() => {
     if (!activeWorkspace) return;
     socketService.connect();
+
+    // Join all workspace channels for background unread notifications
+    channels.forEach(ch => socketService.joinChannel(ch._id));
 
     const onNewMessage = (msg) => {
       const msgChId = typeof msg.channel === 'object' ? msg.channel._id : msg.channel;
@@ -288,6 +306,19 @@ const DashboardPage = () => {
     }
   };
 
+  const handleShowInvite = (code) => {
+    setShowInviteCode(code);
+    setCopiedInvite(false);
+  };
+
+  const handleCopyInviteCode = () => {
+    if (showInviteCode) {
+      navigator.clipboard.writeText(showInviteCode);
+      setCopiedInvite(true);
+      setTimeout(() => setCopiedInvite(false), 2000);
+    }
+  };
+
   const handleCreateDm = (user) => {
     setCreateDmModalOpen(false);
     prevUserId.current = null;
@@ -388,7 +419,7 @@ const DashboardPage = () => {
           <div className="relative">
             <button onClick={() => setShowUserMenu(!showUserMenu)} className="w-full flex items-center gap-3 p-2 hover:bg-blue-500/60 dark:hover:bg-[#31363F] rounded-lg transition-colors group">
               <div className="relative">
-                <div className={`w-9 h-9 bg-gradient-to-br ${appUser.color} rounded-lg flex items-center justify-center text-white font-bold text-sm`}>{appUser.avatar}</div>
+                <UserAvatar avatarUrl={appUser.avatarUrl} initials={appUser.avatar} color={appUser.color} />
                 <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-blue-600 dark:border-[#222831] rounded-full"></div>
               </div>
               <div className="flex-1 text-left min-w-0">
@@ -418,12 +449,33 @@ const DashboardPage = () => {
       </div>
 
       {/* Chat Area */}
-      <ChatView chatDetails={activeChat} messages={messages} onSendMessage={handleSendMessage} onReaction={handleReaction} onDeleteMessage={handleDeleteMessage} currentUser={appUser} />
+      <ChatView chatDetails={activeChat} messages={messages} onSendMessage={handleSendMessage} onReaction={handleReaction} onDeleteMessage={handleDeleteMessage} currentUser={appUser} onShowInvite={handleShowInvite} />
 
       {/* Modals */}
       <CreateChannelModal isOpen={isCreateChannelModalOpen} onClose={() => setCreateChannelModalOpen(false)} onCreateChannel={handleCreateChannel} onJoinChannel={handleJoinChannel} />
       <CreateDirectMessageModal isOpen={isCreateDmModalOpen} onClose={() => setCreateDmModalOpen(false)} users={allUsers.filter(u => u.id !== appUser.id)} onSelectUser={handleCreateDm} />
       <AddMemberModal isOpen={isAddMemberModalOpen} onClose={() => setAddMemberModalOpen(false)} workspaceId={activeWorkspace._id} />
+
+      {/* Invite Code Popup */}
+      {showInviteCode && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowInviteCode(false)}>
+          <div className="bg-white/95 dark:bg-[#31363F]/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-200/50 dark:border-[#76ABAE]/20 p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-slate-900 dark:text-[#EEEEEE] mb-1">Invite Code</h3>
+            <p className="text-sm text-slate-500 dark:text-[#EEEEEE]/50 mb-4">Share this code to invite members to this private channel</p>
+            <div className="flex gap-2 mb-4">
+              <div className="flex-1 bg-slate-50 dark:bg-[#222831]/80 border border-slate-200 dark:border-[#76ABAE]/30 px-4 py-3 rounded-xl flex items-center gap-2">
+                <Hash className="w-4 h-4 text-blue-600 dark:text-[#76ABAE] flex-shrink-0" />
+                <span className="text-sm font-mono font-bold tracking-widest text-blue-600 dark:text-[#76ABAE]">{showInviteCode}</span>
+              </div>
+              <button onClick={handleCopyInviteCode} className={`px-4 py-3 rounded-xl font-bold text-sm flex items-center gap-2 transition-all border ${copiedInvite ? 'bg-green-500 text-white border-green-500' : 'bg-blue-600 dark:bg-[#76ABAE] text-white dark:text-[#222831] border-transparent hover:shadow-lg'}`}>
+                {copiedInvite ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                {copiedInvite ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+            <button onClick={() => setShowInviteCode(false)} className="w-full py-2.5 bg-slate-100 dark:bg-[#222831]/80 text-slate-700 dark:text-[#EEEEEE]/70 rounded-xl hover:bg-slate-200 dark:hover:bg-[#222831] transition-all font-medium text-sm">Close</button>
+          </div>
+        </div>
+      )}
 
       {/* Right Sidebar - Online Users */}
       <div className="w-64 bg-slate-50 dark:bg-[#222831] border-l border-slate-200 dark:border-[#76ABAE]/20 overflow-y-auto transition-colors duration-500">
@@ -433,7 +485,7 @@ const DashboardPage = () => {
             {allUsers.filter(u => u.status === 'online').map((user) => (
               <button key={user.id} onClick={() => handleSelectUser(user)} className="w-full flex items-center gap-3 p-2 hover:bg-slate-100 dark:hover:bg-[#31363F] rounded-lg transition-colors group">
                 <div className="relative">
-                  <div className={`w-9 h-9 bg-gradient-to-br ${user.color} rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-lg`}>{user.avatar}</div>
+                  <UserAvatar avatarUrl={user.avatarUrl} initials={user.avatar} color={user.color} className="shadow-lg" />
                   <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-slate-50 dark:border-[#222831] rounded-full"></div>
                 </div>
                 <span className="text-sm font-medium text-slate-900 dark:text-[#EEEEEE] truncate">{user.name}</span>
@@ -445,7 +497,7 @@ const DashboardPage = () => {
             {allUsers.filter(u => u.status === 'away').map((user) => (
               <button key={user.id} onClick={() => handleSelectUser(user)} className="w-full flex items-center gap-3 p-2 hover:bg-slate-100 dark:hover:bg-[#31363F] rounded-lg transition-colors group">
                 <div className="relative">
-                  <div className={`w-9 h-9 bg-gradient-to-br ${user.color} rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-lg opacity-60`}>{user.avatar}</div>
+                  <UserAvatar avatarUrl={user.avatarUrl} initials={user.avatar} color={user.color} className="shadow-lg opacity-60" />
                   <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-yellow-500 border-2 border-slate-50 dark:border-[#222831] rounded-full"></div>
                 </div>
                 <span className="text-sm font-medium text-slate-900 dark:text-[#EEEEEE] opacity-60 truncate">{user.name}</span>
@@ -462,6 +514,8 @@ const DashboardPage = () => {
 function mapMessage(msg, currentUserId) {
   const senderId = msg.sender?._id || msg.sender;
   const rawReactions = msg.reactions || {};
+  const senderAvatar = msg.sender?.avatar || '';
+  const isUrl = senderAvatar && (senderAvatar.startsWith('http') || senderAvatar.startsWith('data:'));
   return {
     id: msg._id,
     odId: msg._id,
@@ -470,7 +524,8 @@ function mapMessage(msg, currentUserId) {
     time: new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     reactions: formatReactions(rawReactions, currentUserId),
     name: msg.sender?.fullName || msg.sender?.email || 'Unknown',
-    avatar: msg.sender?.avatar || (msg.sender?.fullName || 'U').substring(0, 2).toUpperCase(),
+    avatar: (msg.sender?.fullName || 'U').substring(0, 2).toUpperCase(),
+    avatarUrl: isUrl ? senderAvatar : '',
     color: senderId === currentUserId ? 'from-pink-500 to-rose-500' : 'from-blue-500 to-cyan-500',
     userId: senderId,
   };

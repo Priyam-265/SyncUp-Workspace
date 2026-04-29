@@ -5,7 +5,7 @@ import { Plus, Users, Hash, Zap, ArrowRight, Building2, X, Link, Mail, Copy, Che
 import { useTheme } from '../context/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 
-const generateInviteLink = (id) => `https://syncup.io/join/${id}`;
+const generateInviteLink = (code) => `${window.location.origin}/workspaces?join=${code}`;
 
 // ── Glass Filter SVG (required for liquid glass effect) ─────────────
 function GlassFilter() {
@@ -307,7 +307,7 @@ const WorkspaceSelectionPage = () => {
         description: 'New workspace'
       });
       // Use the returned inviteCode
-      const inviteLink = `https://syncup.io/join/${created.inviteCode}`;
+      const inviteLink = generateInviteLink(created.inviteCode);
       setCreatedWorkspace({ ...created, inviteId: created.inviteCode, inviteLink });
     } catch (err) {
       console.error(err);

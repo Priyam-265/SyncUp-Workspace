@@ -220,10 +220,14 @@ const SettingsPage = () => {
                       <h3 className="text-lg font-bold text-slate-900 dark:text-[#EEEEEE] mb-6">Profile Picture</h3>
                       <div className="flex items-center gap-6">
                         <div className="relative group">
-                          <div className="w-24 h-24 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center text-white text-3xl font-bold shadow-xl">
-                            {`${firstName[0] || 'J'}${lastName[0] || 'D'}`}
-                          </div>
-                          <button className="absolute inset-0 bg-black/50 rounded-2xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          {currentUser.avatar && (currentUser.avatar.startsWith('http') || currentUser.avatar.startsWith('data:')) ? (
+                            <img src={currentUser.avatar} alt="Avatar" className="w-24 h-24 rounded-2xl object-cover shadow-xl" />
+                          ) : (
+                            <div className="w-24 h-24 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center text-white text-3xl font-bold shadow-xl">
+                              {`${firstName[0] || 'J'}${lastName[0] || 'D'}`}
+                            </div>
+                          )}
+                          <button onClick={() => fileInputRef.current?.click()} className="absolute inset-0 bg-black/50 rounded-2xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
                             <Camera className="w-6 h-6 text-white" />
                           </button>
                         </div>

@@ -1,14 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Hash, Lock, Video, Phone, MoreVertical, Send, Smile, AtSign, Paperclip, Plus, Image, FileText, Download, ArrowLeft, X, File, Film, Music, Trash2
+  Hash, Lock, Video, Phone, MoreVertical, Send, Smile, AtSign, Paperclip, Plus, Image, FileText, Download, ArrowLeft, X, File, Film, Music, Trash2, Copy, Check, UserPlus
 } from 'lucide-react';
 import MessageReactions from './MessageReactions';
 import TypingIndicator from './TypingIndicator';
+import UserAvatar from './UserAvatar';
 
 const availableEmojis = ['😀', '😂', '😍', '🤔', '👍', '❤️', '🔥', '🎉', '💯', '😮', '😢', '🙏', '✅', '🚀', '💪', '🎨', '☕', '🌟', '👀', '😎'];
 
-const ChatView = ({ chatDetails, messages, onSendMessage, onReaction, onDeleteMessage, currentUser }) => {
+const ChatView = ({ chatDetails, messages, onSendMessage, onReaction, onDeleteMessage, currentUser, onShowInvite }) => {
   const navigate = useNavigate();
   const [message, setMessage] = useState('');
   const [typingUser, setTypingUser] = useState(null);
@@ -123,9 +124,7 @@ const ChatView = ({ chatDetails, messages, onSendMessage, onReaction, onDeleteMe
             <Hash className="w-5 h-5 text-slate-600 dark:text-[#EEEEEE]/50" />
           ) : (
             <div className="relative">
-              <div className={`w-8 h-8 bg-gradient-to-br ${chatDetails.color || 'from-blue-500 to-cyan-500'} rounded-full flex items-center justify-center text-white font-bold text-sm`}>
-                {chatDetails.avatar}
-              </div>
+              <UserAvatar avatarUrl={chatDetails.avatarUrl} initials={chatDetails.avatar} color={chatDetails.color || 'from-blue-500 to-cyan-500'} size="w-8 h-8" className="rounded-full" />
               <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 ${chatDetails.status === 'online' ? 'bg-green-500' : 'bg-slate-400'} border-2 border-white dark:border-[#222831] rounded-full`}></div>
             </div>
           )}
@@ -137,6 +136,16 @@ const ChatView = ({ chatDetails, messages, onSendMessage, onReaction, onDeleteMe
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {/* Invite button for private channels */}
+          {isChannel && chatDetails.isPrivate && chatDetails.inviteCode && onShowInvite && (
+            <button
+              onClick={() => onShowInvite(chatDetails.inviteCode)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 dark:bg-[#76ABAE]/10 hover:bg-blue-100 dark:hover:bg-[#76ABAE]/20 rounded-lg transition-colors text-blue-600 dark:text-[#76ABAE] text-sm font-medium"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              Invite
+            </button>
+          )}
           <button className="w-9 h-9 hover:bg-slate-100 dark:hover:bg-[#31363F] rounded-lg flex items-center justify-center transition-colors">
             <Phone className="w-4 h-4 text-slate-600 dark:text-[#EEEEEE]/50" />
           </button>
@@ -171,9 +180,7 @@ const ChatView = ({ chatDetails, messages, onSendMessage, onReaction, onDeleteMe
             >
               {!isOwnMessage && (
                 <div className="relative flex-shrink-0">
-                  <div className={`w-10 h-10 bg-gradient-to-br ${msg.color} rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg`}>
-                    {msg.avatar}
-                  </div>
+                  <UserAvatar avatarUrl={msg.avatarUrl} initials={msg.avatar} color={msg.color} size="w-10 h-10" className="rounded-xl shadow-lg" />
                 </div>
               )}
               <div className={`flex-1 min-w-0 ${isOwnMessage ? 'text-right' : ''}`}>
@@ -249,9 +256,7 @@ const ChatView = ({ chatDetails, messages, onSendMessage, onReaction, onDeleteMe
               </div>
               {isOwnMessage && (
                 <div className="relative flex-shrink-0">
-                  <div className={`w-10 h-10 bg-gradient-to-br ${currentUser.color} rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg`}>
-                    {currentUser.avatar}
-                  </div>
+                  <UserAvatar avatarUrl={currentUser.avatarUrl} initials={currentUser.avatar} color={currentUser.color} size="w-10 h-10" className="rounded-xl shadow-lg" />
                 </div>
               )}
             </div>
