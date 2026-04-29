@@ -208,6 +208,14 @@ const DashboardPage = () => {
         setChannels(prev => prev.map(c =>
           String(c._id) === String(msgChId) ? { ...c, unread: (c.unread || 0) + 1 } : c
         ));
+        
+        // Also track unread for Direct Messages (if the message came from a user)
+        const senderId = typeof msg.sender === 'object' ? msg.sender._id : msg.sender;
+        if (senderId) {
+          setAllUsers(prev => prev.map(u => 
+            String(u.id) === String(senderId) ? { ...u, unread: (u.unread || 0) + 1 } : u
+          ));
+        }
       }
     };
 
@@ -272,6 +280,7 @@ const DashboardPage = () => {
   };
 
   const handleSelectUser = (user) => {
+    setAllUsers(prev => prev.map(u => String(u.id) === String(user.id) ? { ...u, unread: 0 } : u));
     prevChannelId.current = null;
     prevUserId.current = null;
     navigate(`/dashboard/${activeWorkspace._id}/dm/${user.id}`);
