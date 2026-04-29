@@ -11,6 +11,7 @@ async function fetchClient(endpoint, options = {}) {
   
   const config = {
     ...options,
+    credentials: 'include',
     headers: {
       ...defaultHeaders,
       ...options.headers,
