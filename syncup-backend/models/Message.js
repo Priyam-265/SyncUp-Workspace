@@ -29,6 +29,12 @@ const messageSchema = new mongoose.Schema(
     fileName: {
       type: String,
     },
+    // reactions: { "👍": ["userId1", "userId2"], "❤️": ["userId3"] }
+    reactions: {
+      type: Map,
+      of: [String],
+      default: {},
+    },
   },
   { timestamps: true }
 );

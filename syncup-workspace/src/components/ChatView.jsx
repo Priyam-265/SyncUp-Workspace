@@ -1,24 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Hash, Lock, Video, Phone, MoreVertical, Send, Smile, AtSign, Paperclip, Plus, Image, FileText, Download, ArrowLeft, X, File, Film, Music
+  Hash, Lock, Video, Phone, MoreVertical, Send, Smile, AtSign, Paperclip, Plus, Image, FileText, Download, ArrowLeft, X, File, Film, Music, Trash2
 } from 'lucide-react';
 import MessageReactions from './MessageReactions';
 import TypingIndicator from './TypingIndicator';
-import { users } from '../data/mockData';
 
 const availableEmojis = ['😀', '😂', '😍', '🤔', '👍', '❤️', '🔥', '🎉', '💯', '😮', '😢', '🙏', '✅', '🚀', '💪', '🎨', '☕', '🌟', '👀', '😎'];
 
-const ChatView = ({ chatDetails, messages, onSendMessage, onReaction, currentUser }) => {
+const ChatView = ({ chatDetails, messages, onSendMessage, onReaction, onDeleteMessage, currentUser }) => {
   const navigate = useNavigate();
   const [message, setMessage] = useState('');
   const [typingUser, setTypingUser] = useState(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showFilePicker, setShowFilePicker] = useState(false);
+  const [contextMenu, setContextMenu] = useState(null); // { x, y, messageId, isOwn }
   const messagesEndRef = useRef(null);
   const typingTimerRef = useRef(null);
   const emojiPickerRef = useRef(null);
   const filePickerRef = useRef(null);
+  const contextMenuRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -37,9 +38,19 @@ const ChatView = ({ chatDetails, messages, onSendMessage, onReaction, currentUse
       if (filePickerRef.current && !filePickerRef.current.contains(e.target)) {
         setShowFilePicker(false);
       }
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target)) {
+        setContextMenu(null);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Close context menu on scroll
+  useEffect(() => {
+    const handleScroll = () => setContextMenu(null);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => window.removeEventListener('scroll', handleScroll, true);
   }, []);
 
   const handleTyping = (e) => {
@@ -72,7 +83,25 @@ const ChatView = ({ chatDetails, messages, onSendMessage, onReaction, currentUse
     setShowEmojiPicker(false);
   };
 
-  if (!chatDetails) {
+  const handleContextMenu = (e, msg) => {
+    e.preventDefault();
+    const isOwn = msg.userId === currentUser?.id;
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      messageId: msg.id,
+      isOwn,
+    });
+  };
+
+  const handleDeleteClick = () => {
+    if (contextMenu && onDeleteMessage) {
+      onDeleteMessage(contextMenu.messageId);
+    }
+    setContextMenu(null);
+  };
+
+  if (!chatDetails || !currentUser) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-white dark:bg-[#222831] h-full transition-colors duration-500">
         <div className="text-center">
@@ -104,7 +133,7 @@ const ChatView = ({ chatDetails, messages, onSendMessage, onReaction, currentUse
             {chatDetails.name}
           </h2>
           <span className="text-sm text-slate-500 dark:text-[#EEEEEE]/50">
-            {isChannel ? `${chatDetails.memberCount} members` : (chatDetails.status === 'online' ? 'Online' : 'Offline')}
+            {isChannel ? `${chatDetails.memberCount || 0} members` : (chatDetails.status === 'online' ? 'Online' : 'Offline')}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -119,87 +148,141 @@ const ChatView = ({ chatDetails, messages, onSendMessage, onReaction, currentUse
 
       {/* Messages Container */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {messages.map((msg) => (
-          <div key={msg.id} className={`flex gap-3 group ${msg.name === currentUser.name ? 'justify-end' : ''}`}>
-            {msg.name !== currentUser.name && (
-              <div className="relative flex-shrink-0">
-                <div className={`w-10 h-10 bg-gradient-to-br ${msg.color} rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg`}>
-                  {msg.avatar}
-                </div>
-              </div>
-            )}
-            <div className={`flex-1 min-w-0 ${msg.name === currentUser.name ? 'text-right' : ''}`}>
-              <div className={`flex items-baseline gap-2 mb-1 ${msg.name === currentUser.name ? 'justify-end' : ''}`}>
-                <span className="font-bold text-slate-900 dark:text-[#EEEEEE] text-sm">
-                  {msg.name}
-                </span>
-                <span className="text-xs text-slate-500 dark:text-[#EEEEEE]/40">
-                  {msg.time}
-                </span>
-              </div>
-              <div className={`inline-block p-3 rounded-xl ${msg.name === currentUser.name ? 'bg-blue-500 dark:bg-[#76ABAE] text-white dark:text-[#222831]' : 'bg-slate-100 dark:bg-[#31363F] text-slate-900 dark:text-[#EEEEEE]'}`}>
-                {msg.text && (
-                  <p className="leading-relaxed">
-                    {msg.text}
-                  </p>
-                )}
-                {msg.file && (
-                  <div className="mt-2 max-w-md">
-                    {msg.file.type === 'image' ? (
-                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-[#31363F] dark:to-[#222831] rounded-xl p-4 border border-slate-200 dark:border-[#76ABAE]/20 hover:shadow-lg transition-shadow">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 dark:from-[#76ABAE] dark:to-[#76ABAE]/80 rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg">
-                            <Image className="w-6 h-6 text-white dark:text-[#222831]" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-semibold text-slate-900 dark:text-[#EEEEEE] text-sm truncate">
-                              {msg.file.name}
-                            </div>
-                            <div className="text-xs text-slate-500 dark:text-[#EEEEEE]/40">
-                              {msg.file.size}
-                            </div>
-                          </div>
-                          <button className="w-9 h-9 bg-blue-600 dark:bg-[#76ABAE] hover:bg-blue-700 dark:hover:bg-[#76ABAE]/80 rounded-lg flex items-center justify-center transition-colors shadow-lg flex-shrink-0">
-                            <Download className="w-4 h-4 text-white dark:text-[#222831]" />
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="bg-gradient-to-br from-orange-50 to-red-50 dark:from-[#31363F] dark:to-[#222831] rounded-xl p-4 border border-slate-200 dark:border-[#76ABAE]/20 hover:shadow-lg transition-shadow">
-                        <div className="flex items-center gap-4">
-                          <div className="w-12 h-12 bg-gradient-to-br from-orange-600 to-red-600 rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg">
-                            <FileText className="w-6 h-6 text-white" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-semibold text-slate-900 dark:text-[#EEEEEE] text-sm truncate">
-                              {msg.file.name}
-                            </div>
-                            <div className="text-xs text-slate-500 dark:text-[#EEEEEE]/40">
-                              {msg.file.size}
-                            </div>
-                          </div>
-                          <button className="w-9 h-9 bg-orange-600 hover:bg-orange-700 rounded-lg flex items-center justify-center transition-colors shadow-lg flex-shrink-0">
-                            <Download className="w-4 h-4 text-white" />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              <MessageReactions reactions={msg.reactions} onReaction={(emoji) => onReaction(msg.id, emoji)} />
+        {messages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full text-center">
+            <div className="w-16 h-16 bg-slate-100 dark:bg-[#31363F] rounded-2xl flex items-center justify-center mb-4">
+              {isChannel ? <Hash className="w-8 h-8 text-slate-400 dark:text-[#EEEEEE]/40" /> : <Send className="w-8 h-8 text-slate-400 dark:text-[#EEEEEE]/40" />}
             </div>
-            {msg.name === currentUser.name && (
-              <div className="relative flex-shrink-0">
-                <div className={`w-10 h-10 bg-gradient-to-br ${currentUser.color} rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg`}>
-                  {currentUser.avatar}
-                </div>
-              </div>
-            )}
+            <h3 className="text-lg font-bold text-slate-700 dark:text-[#EEEEEE]/70 mb-1">
+              {isChannel ? `Welcome to #${chatDetails.name}` : `Chat with ${chatDetails.name}`}
+            </h3>
+            <p className="text-sm text-slate-500 dark:text-[#EEEEEE]/40">
+              Send a message to start the conversation.
+            </p>
           </div>
-        ))}
+        )}
+        {messages.map((msg) => {
+          const isOwnMessage = msg.userId === currentUser.id;
+          return (
+            <div
+              key={msg.id}
+              className={`flex gap-3 group ${isOwnMessage ? 'justify-end' : ''}`}
+              onContextMenu={(e) => handleContextMenu(e, msg)}
+            >
+              {!isOwnMessage && (
+                <div className="relative flex-shrink-0">
+                  <div className={`w-10 h-10 bg-gradient-to-br ${msg.color} rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg`}>
+                    {msg.avatar}
+                  </div>
+                </div>
+              )}
+              <div className={`flex-1 min-w-0 ${isOwnMessage ? 'text-right' : ''}`}>
+                <div className={`flex items-baseline gap-2 mb-1 ${isOwnMessage ? 'justify-end' : ''}`}>
+                  <span className="font-bold text-slate-900 dark:text-[#EEEEEE] text-sm">
+                    {msg.name}
+                  </span>
+                  <span className="text-xs text-slate-500 dark:text-[#EEEEEE]/40">
+                    {msg.time}
+                  </span>
+                  {/* Hover delete button for own messages */}
+                  {isOwnMessage && onDeleteMessage && (
+                    <button
+                      onClick={() => onDeleteMessage(msg.id)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 rounded hover:bg-red-100 dark:hover:bg-red-900/30 flex items-center justify-center"
+                      title="Delete message"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                    </button>
+                  )}
+                </div>
+                <div className={`inline-block p-3 rounded-xl ${isOwnMessage ? 'bg-blue-500 dark:bg-[#76ABAE] text-white dark:text-[#222831]' : 'bg-slate-100 dark:bg-[#31363F] text-slate-900 dark:text-[#EEEEEE]'}`}>
+                  {msg.text && (
+                    <p className="leading-relaxed">
+                      {msg.text}
+                    </p>
+                  )}
+                  {msg.file && (
+                    <div className="mt-2 max-w-md">
+                      {msg.file.type === 'image' ? (
+                        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-[#31363F] dark:to-[#222831] rounded-xl p-4 border border-slate-200 dark:border-[#76ABAE]/20 hover:shadow-lg transition-shadow">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 dark:from-[#76ABAE] dark:to-[#76ABAE]/80 rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg">
+                              <Image className="w-6 h-6 text-white dark:text-[#222831]" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold text-slate-900 dark:text-[#EEEEEE] text-sm truncate">
+                                {msg.file.name}
+                              </div>
+                              <div className="text-xs text-slate-500 dark:text-[#EEEEEE]/40">
+                                {msg.file.size}
+                              </div>
+                            </div>
+                            <button className="w-9 h-9 bg-blue-600 dark:bg-[#76ABAE] hover:bg-blue-700 dark:hover:bg-[#76ABAE]/80 rounded-lg flex items-center justify-center transition-colors shadow-lg flex-shrink-0">
+                              <Download className="w-4 h-4 text-white dark:text-[#222831]" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="bg-gradient-to-br from-orange-50 to-red-50 dark:from-[#31363F] dark:to-[#222831] rounded-xl p-4 border border-slate-200 dark:border-[#76ABAE]/20 hover:shadow-lg transition-shadow">
+                          <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-gradient-to-br from-orange-600 to-red-600 rounded-lg flex items-center justify-center flex-shrink-0 shadow-lg">
+                              <FileText className="w-6 h-6 text-white" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold text-slate-900 dark:text-[#EEEEEE] text-sm truncate">
+                                {msg.file.name}
+                              </div>
+                              <div className="text-xs text-slate-500 dark:text-[#EEEEEE]/40">
+                                {msg.file.size}
+                              </div>
+                            </div>
+                            <button className="w-9 h-9 bg-orange-600 hover:bg-orange-700 rounded-lg flex items-center justify-center transition-colors shadow-lg flex-shrink-0">
+                              <Download className="w-4 h-4 text-white" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <MessageReactions reactions={msg.reactions} onReaction={(emoji) => onReaction(msg.id, emoji)} />
+              </div>
+              {isOwnMessage && (
+                <div className="relative flex-shrink-0">
+                  <div className={`w-10 h-10 bg-gradient-to-br ${currentUser.color} rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg`}>
+                    {currentUser.avatar}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Right-click context menu */}
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="fixed z-50 bg-white dark:bg-[#31363F] rounded-xl shadow-2xl border border-slate-200 dark:border-[#76ABAE]/20 py-1 min-w-[160px]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          {contextMenu.isOwn && onDeleteMessage && (
+            <button
+              onClick={handleDeleteClick}
+              className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-red-600 dark:text-red-400"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span className="text-sm font-medium">Delete Message</span>
+            </button>
+          )}
+          {!contextMenu.isOwn && (
+            <div className="px-4 py-2.5 text-sm text-slate-500 dark:text-[#EEEEEE]/40">
+              No actions available
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Typing Indicator */}
       <TypingIndicator typingUser={typingUser} />

@@ -1,7 +1,4 @@
-// Frontend API service layer replacing mockData.js
-
-// Using native fetch API for maximum compatibility. 
-// Note: Interceptors logic handles JSON unwrapping naturally.
+// Frontend API service layer
 
 const BASE_URL = '/api';
 
@@ -153,13 +150,22 @@ export const messageAPI = {
       }),
     });
   },
+
+  deleteMessage: (messageId) => fetchClient(`/messages/${messageId}`, {
+    method: 'DELETE',
+  }),
+
+  toggleReaction: (messageId, emoji) => fetchClient(`/messages/${messageId}/reactions`, {
+    method: 'POST',
+    body: JSON.stringify({ emoji }),
+  }),
 };
 
 // -----------------------------------------------------------------------------
 // User API
 // -----------------------------------------------------------------------------
 export const userAPI = {
-  search: (query) => fetchClient(`/users/search?q=${query}`, { method: 'GET' }),
+  search: (query) => fetchClient(`/users/search?q=${encodeURIComponent(query)}`, { method: 'GET' }),
   
   updateProfile: (id, data) => fetchClient(`/users/${id}`, {
     method: 'PATCH',
@@ -170,9 +176,14 @@ export const userAPI = {
     const formData = new FormData();
     formData.append('avatar', file);
     
-    return fetchClient(`/users/${id}/avatar`, {
-      method: 'POST',
+    return fetchClient(`/users/${id}`, {
+      method: 'PATCH',
       body: formData,
     });
   },
+
+  changePassword: (id, currentPassword, newPassword) => fetchClient(`/users/${id}/change-password`, {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  }),
 };

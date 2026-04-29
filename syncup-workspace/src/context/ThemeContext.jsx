@@ -70,7 +70,8 @@ export const ThemeProvider = ({ children }) => {
   const login = async (credentials) => {
     try {
       const data = await authAPI.login(credentials);
-      setCurrentUser(data.user);
+      // Backend returns user fields directly, not nested under .user
+      setCurrentUser(data);
       return data;
     } catch (error) {
       throw error;
@@ -80,7 +81,8 @@ export const ThemeProvider = ({ children }) => {
   const register = async (userData) => {
     try {
       const data = await authAPI.register(userData);
-      setCurrentUser(data.user);
+      // Backend returns user fields directly, not nested under .user
+      setCurrentUser(data);
       return data;
     } catch (error) {
       throw error;
@@ -117,12 +119,21 @@ export const ThemeProvider = ({ children }) => {
     }
   };
 
+  const changePassword = async (id, currentPassword, newPassword) => {
+    try {
+      const result = await userAPI.changePassword(id, currentPassword, newPassword);
+      return result;
+    } catch (error) {
+      throw error;
+    }
+  };
+
   return (
     <ThemeContext.Provider value={{
       darkMode, toggleDarkMode,
       settings, updateSettings,
       currentUser, setCurrentUser, authLoading,
-      login, register, logout, updateUser, uploadAvatar
+      login, register, logout, updateUser, uploadAvatar, changePassword
     }}>
       {children}
     </ThemeContext.Provider>

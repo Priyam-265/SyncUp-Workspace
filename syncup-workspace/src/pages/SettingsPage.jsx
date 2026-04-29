@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { userAPI } from '../services/api';
 import {
   User, Mail, Lock, Bell, Shield, Palette, Globe, Zap,
   Camera, Check, X, Eye, EyeOff, ArrowLeft
@@ -14,16 +15,27 @@ const SettingsPage = () => {
   const [showOldPassword, setShowOldPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showSaveToast, setShowSaveToast] = useState(false);
+  const [saveError, setSaveError] = useState('');
+
+  // Parse fullName into first/last
+  const parsedFirst = useMemo(() => (currentUser?.fullName || '').split(' ')[0] || '', [currentUser?.fullName]);
+  const parsedLast = useMemo(() => (currentUser?.fullName || '').split(' ').slice(1).join(' ') || '', [currentUser?.fullName]);
 
   // Profile fields
-  const [firstName, setFirstName] = useState(currentUser.firstName || 'John');
-  const [lastName, setLastName] = useState(currentUser.lastName || 'Doe');
-  const [displayName, setDisplayName] = useState(currentUser.displayName || 'John Doe');
-  const [bio, setBio] = useState(currentUser.bio || '');
-  const [phone, setPhone] = useState(currentUser.phone || '');
+  const [firstName, setFirstName] = useState(parsedFirst);
+  const [lastName, setLastName] = useState(parsedLast);
+  const [displayName, setDisplayName] = useState(currentUser?.displayName || '');
+  const [bio, setBio] = useState(currentUser?.bio || '');
+  const [phone, setPhone] = useState(currentUser?.phone || '');
 
   // Account fields
-  const [email, setEmail] = useState(currentUser.email || 'john@company.com');
+  const [email, setEmail] = useState(currentUser?.email || '');
+
+  // Password fields
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
   // Notification toggles (persisted)
   const [notifState, setNotifState] = useState({
@@ -60,10 +72,13 @@ const SettingsPage = () => {
 
   const handleSaveProfile = async () => {
     try {
-      await updateUser(currentUser._id, { firstName, lastName, displayName, bio, phone });
+      setSaveError('');
+      const fullName = `${firstName} ${lastName}`.trim();
+      await updateUser(currentUser._id, { fullName, displayName, bio, phone });
       showToast();
     } catch (err) {
       console.error(err);
+      setSaveError(err.message || 'Failed to save profile');
     }
   };
 
@@ -86,6 +101,39 @@ const SettingsPage = () => {
     updateSettings({ language, timezone });
     showToast();
   };
+
+  const handleChangePassword = async () => {
+    setPasswordError('');
+    if (!currentPassword || !newPassword) {
+      setPasswordError('Both fields are required');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPasswordError('New password must be at least 6 characters');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Passwords do not match');
+      return;
+    }
+    try {
+      await userAPI.changePassword(currentUser._id, currentPassword, newPassword);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      showToast();
+    } catch (err) {
+      setPasswordError(err.message || 'Failed to change password');
+    }
+  };
+
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-[#222831]">
+        <div className="w-8 h-8 border-4 border-blue-500 rounded-full border-t-transparent animate-spin"></div>
+      </div>
+    );
+  }
 
   const tabs = [
     { id: 'profile', label: 'Profile', icon: User },
@@ -234,7 +282,7 @@ const SettingsPage = () => {
                         <button onClick={handleSaveProfile} className="px-6 py-3 bg-blue-600 dark:bg-[#76ABAE] text-white dark:text-[#222831] rounded-xl hover:shadow-lg hover:shadow-blue-500/30 dark:hover:shadow-[#76ABAE]/20 transition-all font-semibold">
                           Save Changes
                         </button>
-                        <button onClick={() => { setFirstName(currentUser.firstName); setLastName(currentUser.lastName); setDisplayName(currentUser.displayName); setBio(currentUser.bio); setPhone(currentUser.phone); }}
+                        <button onClick={() => { setFirstName(parsedFirst); setLastName(parsedLast); setDisplayName(currentUser.displayName || ''); setBio(currentUser.bio || ''); setPhone(currentUser.phone || ''); }}
                           className="px-6 py-3 bg-slate-100 dark:bg-[#222831]/80 text-slate-700 dark:text-[#EEEEEE]/70 rounded-xl hover:bg-slate-200 dark:hover:bg-[#222831] transition-all font-semibold">
                           Cancel
                         </button>
@@ -285,7 +333,7 @@ const SettingsPage = () => {
                         <div>
                           <label className="block text-sm font-semibold text-slate-700 dark:text-[#EEEEEE]/70 mb-2">Current Password</label>
                           <div className="relative">
-                            <input type={showOldPassword ? 'text' : 'password'}
+                            <input type={showOldPassword ? 'text' : 'password'} value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)}
                               className="w-full px-4 py-3 pr-12 bg-slate-50 dark:bg-[#222831]/80 border border-slate-200 dark:border-[#76ABAE]/30 rounded-xl text-slate-900 dark:text-[#EEEEEE] focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-[#76ABAE] transition-all" />
                             <button type="button" onClick={() => setShowOldPassword(!showOldPassword)}
                               className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-[#EEEEEE]/70">
@@ -296,7 +344,7 @@ const SettingsPage = () => {
                         <div>
                           <label className="block text-sm font-semibold text-slate-700 dark:text-[#EEEEEE]/70 mb-2">New Password</label>
                           <div className="relative">
-                            <input type={showNewPassword ? 'text' : 'password'}
+                            <input type={showNewPassword ? 'text' : 'password'} value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
                               className="w-full px-4 py-3 pr-12 bg-slate-50 dark:bg-[#222831]/80 border border-slate-200 dark:border-[#76ABAE]/30 rounded-xl text-slate-900 dark:text-[#EEEEEE] focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-[#76ABAE] transition-all" />
                             <button type="button" onClick={() => setShowNewPassword(!showNewPassword)}
                               className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-[#EEEEEE]/70">
@@ -306,11 +354,14 @@ const SettingsPage = () => {
                         </div>
                         <div>
                           <label className="block text-sm font-semibold text-slate-700 dark:text-[#EEEEEE]/70 mb-2">Confirm New Password</label>
-                          <input type="password"
+                          <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
                             className="w-full px-4 py-3 bg-slate-50 dark:bg-[#222831]/80 border border-slate-200 dark:border-[#76ABAE]/30 rounded-xl text-slate-900 dark:text-[#EEEEEE] focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-[#76ABAE] transition-all" />
                         </div>
+                        {passwordError && (
+                          <p className="text-sm text-red-500 font-medium">{passwordError}</p>
+                        )}
                       </div>
-                      <button onClick={showToast} className="mt-6 px-6 py-3 bg-blue-600 dark:bg-[#76ABAE] text-white dark:text-[#222831] rounded-xl hover:shadow-lg hover:shadow-blue-500/30 dark:hover:shadow-[#76ABAE]/20 transition-all font-semibold">
+                      <button onClick={handleChangePassword} className="mt-6 px-6 py-3 bg-blue-600 dark:bg-[#76ABAE] text-white dark:text-[#222831] rounded-xl hover:shadow-lg hover:shadow-blue-500/30 dark:hover:shadow-[#76ABAE]/20 transition-all font-semibold">
                         Update Password
                       </button>
                     </div>

@@ -1,7 +1,11 @@
 import express from "express";
 import multer from "multer";
-import { getMessages, sendMessage, deleteMessage } from "../controllers/message.controller.js";
-import { uploadToCloudinary } from "../utils/cloudinary.js";
+import {
+  getMessages,
+  sendMessage,
+  deleteMessage,
+  toggleReaction,
+} from "../controllers/message.controller.js";
 import protectRoute from "../middleware/auth.middleware.js";
 
 const router = express.Router();
@@ -19,6 +23,9 @@ router.post("/channels/:channelId/messages", protectRoute, sendMessage);
 // Message route scoped under /api/messages/:id
 router.delete("/messages/:id", protectRoute, deleteMessage);
 
+// Reaction route
+router.post("/messages/:id/reactions", protectRoute, toggleReaction);
+
 // File upload route — POST /api/upload
 router.post("/upload", protectRoute, upload.single("file"), async (req, res) => {
   try {
@@ -26,6 +33,7 @@ router.post("/upload", protectRoute, upload.single("file"), async (req, res) => 
       return res.status(400).json({ message: "No file provided" });
     }
 
+    const { uploadToCloudinary } = await import("../utils/cloudinary.js");
     const result = await uploadToCloudinary(req.file.buffer, "syncup/files");
 
     res.status(200).json({

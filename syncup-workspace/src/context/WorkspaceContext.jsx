@@ -35,7 +35,6 @@ export const WorkspaceProvider = ({ children }) => {
   const joinWorkspace = async (code) => {
     try {
       const workspace = await workspaceAPI.joinByCode(code);
-      // Update workspace list if newly joined
       if (!workspaces.find(w => w._id === workspace._id)) {
         setWorkspaces(prev => [...prev, workspace]);
       }
@@ -45,13 +44,24 @@ export const WorkspaceProvider = ({ children }) => {
     }
   };
 
+  // Generate an invite object from a workspace's existing inviteCode
+  const createInvite = useCallback((workspaceId) => {
+    const ws = workspaces.find(w => w._id === workspaceId);
+    if (!ws) return { code: '--------', link: '' };
+    const code = ws.inviteCode || '--------';
+    const link = `${window.location.origin}/workspaces?join=${code}`;
+    return { code, link };
+  }, [workspaces]);
+
   return (
     <WorkspaceContext.Provider value={{ 
       workspaces, 
+      setWorkspaces,
       loading, 
       fetchWorkspaces,
       createWorkspace,
-      joinWorkspace
+      joinWorkspace,
+      createInvite
     }}>
       {children}
     </WorkspaceContext.Provider>

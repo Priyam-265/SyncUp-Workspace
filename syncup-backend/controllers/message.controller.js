@@ -23,7 +23,9 @@ export const getMessages = async (req, res) => {
     );
 
     if (!isMember) {
-      return res.status(403).json({ message: "You are not a member of this channel" });
+      return res
+        .status(403)
+        .json({ message: "You are not a member of this channel" });
     }
 
     const messages = await Message.find({ channel: channelId })
@@ -57,7 +59,9 @@ export const sendMessage = async (req, res) => {
 
     // Validate — message must have text or a file
     if (!text && !fileUrl) {
-      return res.status(400).json({ message: "Message must have text or a file" });
+      return res
+        .status(400)
+        .json({ message: "Message must have text or a file" });
     }
 
     // Verify channel exists
@@ -73,7 +77,9 @@ export const sendMessage = async (req, res) => {
     );
 
     if (!isMember) {
-      return res.status(403).json({ message: "You are not a member of this channel" });
+      return res
+        .status(403)
+        .json({ message: "You are not a member of this channel" });
     }
 
     const message = new Message({
@@ -118,21 +124,83 @@ export const deleteMessage = async (req, res) => {
 
     // Only the sender can delete their message
     if (message.sender.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "You can only delete your own messages" });
+      return res
+        .status(403)
+        .json({ message: "You can only delete your own messages" });
     }
 
+    const channelId = message.channel;
     await Message.findByIdAndDelete(message._id);
 
     // Broadcast deletion to channel room
     const io = getIO();
-    io.to(`channel:${message.channel}`).emit("delete-message", {
+    io.to(`channel:${channelId}`).emit("message-deleted", {
       messageId: message._id,
-      channelId: message.channel,
+      channelId,
     });
 
     res.status(200).json({ message: "Message deleted successfully" });
   } catch (error) {
     console.error("DeleteMessage error:", error.message);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// POST /api/messages/:id/reactions — Toggle reaction on a message
+export const toggleReaction = async (req, res) => {
+  try {
+    const { emoji } = req.body;
+    const userId = req.user._id.toString();
+
+    if (!emoji) {
+      return res.status(400).json({ message: "Emoji is required" });
+    }
+
+    const message = await Message.findById(req.params.id);
+    if (!message) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+
+    // Initialize reactions map if needed
+    if (!message.reactions) {
+      message.reactions = new Map();
+    }
+
+    const currentUsers = message.reactions.get(emoji) || [];
+    const userIndex = currentUsers.indexOf(userId);
+
+    if (userIndex > -1) {
+      // Remove user's reaction
+      currentUsers.splice(userIndex, 1);
+      if (currentUsers.length === 0) {
+        message.reactions.delete(emoji);
+      } else {
+        message.reactions.set(emoji, currentUsers);
+      }
+    } else {
+      // Add user's reaction
+      currentUsers.push(userId);
+      message.reactions.set(emoji, currentUsers);
+    }
+
+    await message.save();
+
+    // Convert Map to plain object for response
+    const reactionsObj = {};
+    for (const [key, val] of message.reactions.entries()) {
+      reactionsObj[key] = val;
+    }
+
+    // Broadcast reaction update
+    const io = getIO();
+    io.to(`channel:${message.channel}`).emit("reaction-updated", {
+      messageId: message._id,
+      reactions: reactionsObj,
+    });
+
+    res.status(200).json({ messageId: message._id, reactions: reactionsObj });
+  } catch (error) {
+    console.error("ToggleReaction error:", error.message);
     res.status(500).json({ message: "Internal server error" });
   }
 };

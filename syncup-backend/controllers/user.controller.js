@@ -1,5 +1,5 @@
 import User from "../models/User.js";
-import { uploadToCloudinary } from "../utils/cloudinary.js";
+import bcrypt from "bcryptjs";
 
 // GET /api/users — Get all users
 export const getAllUsers = async (req, res) => {
@@ -8,6 +8,26 @@ export const getAllUsers = async (req, res) => {
     res.status(200).json(users);
   } catch (error) {
     console.error("GetAllUsers error:", error.message);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// GET /api/users/search?q=term — Search users by name or email
+export const searchUsers = async (req, res) => {
+  try {
+    const q = req.query.q || "";
+    if (!q.trim()) return res.status(200).json([]);
+
+    const regex = new RegExp(q, "i");
+    const users = await User.find({
+      $or: [{ fullName: regex }, { displayName: regex }, { email: regex }],
+    })
+      .select("-password")
+      .limit(20);
+
+    res.status(200).json(users);
+  } catch (error) {
+    console.error("SearchUsers error:", error.message);
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -31,31 +51,95 @@ export const getUserById = async (req, res) => {
 // PATCH /api/users/:id — Update user profile
 export const updateUser = async (req, res) => {
   try {
-    const { fullName, avatar } = req.body;
+    const { fullName, displayName, bio, phone, email, avatar } = req.body;
 
     // Only allow users to update their own profile
     if (req.params.id !== req.user._id.toString()) {
-      return res.status(403).json({ message: "You can only update your own profile" });
+      return res
+        .status(403)
+        .json({ message: "You can only update your own profile" });
     }
 
     const updateData = {};
     if (fullName) updateData.fullName = fullName;
+    if (displayName !== undefined) updateData.displayName = displayName;
+    if (bio !== undefined) updateData.bio = bio;
+    if (phone !== undefined) updateData.phone = phone;
+    if (email) updateData.email = email;
 
-    // Handle avatar upload if a file is provided
+    // Handle avatar upload if a file is provided via multer
     if (req.file) {
-      const result = await uploadToCloudinary(req.file.buffer, "syncup/avatars");
-      updateData.avatar = result.secure_url;
+      try {
+        const { uploadToCloudinary } = await import("../utils/cloudinary.js");
+        const result = await uploadToCloudinary(
+          req.file.buffer,
+          "syncup/avatars"
+        );
+        updateData.avatar = result.secure_url;
+      } catch (uploadErr) {
+        console.error("Avatar upload error:", uploadErr.message);
+      }
     } else if (avatar) {
       updateData.avatar = avatar;
     }
 
-    const updatedUser = await User.findByIdAndUpdate(req.params.id, updateData, {
-      new: true,
-    }).select("-password");
+    const updatedUser = await User.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true }
+    ).select("-password");
 
     res.status(200).json(updatedUser);
   } catch (error) {
     console.error("UpdateUser error:", error.message);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// POST /api/users/:id/change-password — Change password
+export const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (req.params.id !== req.user._id.toString()) {
+      return res
+        .status(403)
+        .json({ message: "You can only change your own password" });
+    }
+
+    if (!currentPassword || !newPassword) {
+      return res
+        .status(400)
+        .json({ message: "Both current and new password are required" });
+    }
+
+    if (newPassword.length < 6) {
+      return res
+        .status(400)
+        .json({ message: "New password must be at least 6 characters" });
+    }
+
+    // Fetch user with password (toJSON strips it, but the field is still in DB)
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res
+        .status(400)
+        .json({ message: "Current password is incorrect" });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    await User.findByIdAndUpdate(req.params.id, { password: hashedPassword });
+
+    res.status(200).json({ message: "Password changed successfully" });
+  } catch (error) {
+    console.error("ChangePassword error:", error.message);
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -76,9 +160,11 @@ export const updateUserStatus = async (req, res) => {
       updateData.lastSeen = new Date();
     }
 
-    const updatedUser = await User.findByIdAndUpdate(req.params.id, updateData, {
-      new: true,
-    }).select("-password");
+    const updatedUser = await User.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true }
+    ).select("-password");
 
     if (!updatedUser) {
       return res.status(404).json({ message: "User not found" });

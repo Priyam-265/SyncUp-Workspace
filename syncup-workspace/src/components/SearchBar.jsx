@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { userAPI } from '../services/api';
-import { Search, Loader, X, Hash, User, MessageSquare } from 'lucide-react';
+import { Search, Loader, X, Hash, User, Lock } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 const useDebounce = (value, delay) => {
@@ -19,33 +19,77 @@ const useDebounce = (value, delay) => {
   return debouncedValue;
 };
 
-const SearchBar = () => {
+const SearchBar = ({ channels = [], users = [], workspaceId: propWorkspaceId }) => {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState({ channels: [], users: [], messages: [] });
+  const [apiUsers, setApiUsers] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const debouncedQuery = useDebounce(query, 300);
   const navigate = useNavigate();
-  const { workspaceId } = useParams();
+  const { workspaceId: paramWorkspaceId } = useParams();
   const searchRef = useRef(null);
 
-  const wsId = workspaceId || '1';
+  const wsId = propWorkspaceId || paramWorkspaceId;
 
+  // Filter channels locally from props
+  const filteredChannels = useMemo(() => {
+    if (!debouncedQuery.trim()) return [];
+    const q = debouncedQuery.toLowerCase();
+    return channels.filter(ch =>
+      ch.name && ch.name.toLowerCase().includes(q)
+    );
+  }, [debouncedQuery, channels]);
+
+  // Filter workspace members locally from props
+  const filteredLocalUsers = useMemo(() => {
+    if (!debouncedQuery.trim()) return [];
+    const q = debouncedQuery.toLowerCase();
+    return users.filter(u =>
+      (u.name && u.name.toLowerCase().includes(q)) ||
+      (u.email && u.email.toLowerCase().includes(q))
+    );
+  }, [debouncedQuery, users]);
+
+  // Also search users via API for broader results
   useEffect(() => {
-    if (debouncedQuery) {
+    if (debouncedQuery.trim()) {
       setIsLoading(true);
       userAPI.search(debouncedQuery).then(data => {
-        setResults({ channels: [], users: Array.isArray(data) ? data : [], messages: [] });
+        setApiUsers(Array.isArray(data) ? data : []);
         setIsLoading(false);
       }).catch(err => {
         console.error(err);
-        setResults({ channels: [], users: [], messages: [] });
+        setApiUsers([]);
         setIsLoading(false);
       });
     } else {
-      setResults({ channels: [], users: [], messages: [] });
+      setApiUsers([]);
     }
   }, [debouncedQuery]);
+
+  // Merge local users and API users, deduplicating by id
+  const mergedUsers = useMemo(() => {
+    const seen = new Set();
+    const result = [];
+    
+    // Local users first (workspace members)
+    for (const u of filteredLocalUsers) {
+      if (!seen.has(u.id)) {
+        seen.add(u.id);
+        result.push({ _id: u.id, fullName: u.name, avatar: u.avatar, status: u.status });
+      }
+    }
+    
+    // API users (may include users outside workspace)
+    for (const u of apiUsers) {
+      if (!seen.has(u._id)) {
+        seen.add(u._id);
+        result.push(u);
+      }
+    }
+    
+    return result;
+  }, [filteredLocalUsers, apiUsers]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -65,87 +109,94 @@ const SearchBar = () => {
     setQuery('');
   };
 
+  const hasResults = filteredChannels.length > 0 || mergedUsers.length > 0;
+
   return (
     <div className="relative w-full max-w-xs" ref={searchRef}>
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
         <input
           type="text"
-          placeholder="Search..."
+          placeholder="Search channels & people..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setIsOpen(true)}
-          className="w-full bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white pl-10 pr-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white pl-10 pr-8 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
         />
+        {query && (
+          <button
+            onClick={() => { setQuery(''); setIsOpen(false); }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 hover:bg-slate-200 dark:hover:bg-slate-600 rounded flex items-center justify-center"
+          >
+            <X className="w-3.5 h-3.5 text-slate-400" />
+          </button>
+        )}
       </div>
 
-      {isOpen && (
-        <div className="absolute top-full mt-2 w-full bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 z-10 max-h-96 overflow-y-auto">
-          {isLoading ? (
+      {isOpen && query.trim() && (
+        <div className="absolute top-full mt-2 w-full bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 z-10 max-h-80 overflow-y-auto">
+          {isLoading && mergedUsers.length === 0 && filteredChannels.length === 0 ? (
             <div className="flex items-center justify-center p-4">
-              <Loader className="w-6 h-6 text-blue-500 animate-spin" />
+              <Loader className="w-5 h-5 text-blue-500 animate-spin" />
+            </div>
+          ) : hasResults ? (
+            <div>
+              {/* Channel Results */}
+              {filteredChannels.length > 0 && (
+                <div className="p-2">
+                  <h3 className="text-xs font-semibold text-slate-400 uppercase px-2 mb-1">Channels</h3>
+                  <ul>
+                    {filteredChannels.map(channel => (
+                      <li
+                        key={`ch-${channel._id}`}
+                        onClick={() => handleResultClick(`/dashboard/${wsId}/channel/${channel._id}`)}
+                        className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+                      >
+                        {channel.isPrivate ? (
+                          <Lock className="w-4 h-4 text-slate-500" />
+                        ) : (
+                          <Hash className="w-4 h-4 text-slate-500" />
+                        )}
+                        <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{channel.name}</span>
+                        {channel.members && (
+                          <span className="text-xs text-slate-400 ml-auto">{channel.members.length} members</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* User Results */}
+              {mergedUsers.length > 0 && (
+                <div className="p-2">
+                  <h3 className="text-xs font-semibold text-slate-400 uppercase px-2 mb-1">People</h3>
+                  <ul>
+                    {mergedUsers.map(user => (
+                      <li
+                        key={`usr-${user._id}`}
+                        onClick={() => handleResultClick(`/dashboard/${wsId}/dm/${user._id}`)}
+                        className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+                      >
+                        <div className="w-7 h-7 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-[10px]">
+                          {user.avatar || (user.fullName || 'U').substring(0, 2).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium text-slate-800 dark:text-slate-200 block truncate">
+                            {user.fullName || user.email}
+                          </span>
+                        </div>
+                        {user.status && (
+                          <div className={`w-2 h-2 rounded-full ${user.status === 'online' ? 'bg-green-500' : user.status === 'away' ? 'bg-yellow-500' : 'bg-slate-400'}`} />
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           ) : (
-            (results.channels.length > 0 || results.users.length > 0 || results.messages.length > 0) ? (
-              <div>
-                {results.channels.length > 0 && (
-                  <div className="p-2">
-                    <h3 className="text-xs font-semibold text-slate-400 uppercase px-2 mb-1">Channels</h3>
-                    <ul>
-                      {results.channels.map(channel => (
-                        <li key={`ch-${channel.id}`} onClick={() => handleResultClick(`/dashboard/${wsId}/channel/${channel.id}`)} className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer">
-                          <Hash className="w-4 h-4 text-slate-500" />
-                          <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{channel.name}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {results.users.length > 0 && (
-                  <div className="p-2">
-                    <h3 className="text-xs font-semibold text-slate-400 uppercase px-2 mb-1">Users</h3>
-                    <ul>
-                      {results.users.map(user => (
-                        <li key={`usr-${user._id}`} onClick={() => handleResultClick(`/dashboard/${wsId}/dm/${user._id}`)} className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer">
-                          <div className={`w-6 h-6 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-[10px]`}>
-                            {user.avatar || 'U'}
-                          </div>
-                          <span className="text-sm font-medium text-slate-800 dark:text-slate-200">{user.fullName || user.email}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {results.messages.length > 0 && (
-                  <div className="p-2">
-                    <h3 className="text-xs font-semibold text-slate-400 uppercase px-2 mb-1">Messages</h3>
-                    <ul>
-                      {results.messages.map(message => (
-                        <li
-                          key={`msg-${message.type}-${message.id}-${message.channelId || message.dmUserId}`}
-                          onClick={() => {
-                            if (message.type === 'channel') {
-                              handleResultClick(`/dashboard/${wsId}/channel/${message.channelId}`);
-                            } else {
-                              handleResultClick(`/dashboard/${wsId}/dm/${message.dmUserId}`);
-                            }
-                          }}
-                          className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
-                        >
-                          <MessageSquare className="w-4 h-4 text-slate-500 flex-shrink-0" />
-                          <div className="min-w-0">
-                            <span className="text-sm text-slate-600 dark:text-slate-400 truncate block">{message.text}</span>
-                            <span className="text-xs text-slate-400 dark:text-slate-500">{message.senderName} · {message.time}</span>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            ) : (
-              query && <p className="p-4 text-sm text-slate-500">No results found for "{query}"</p>
-            )
+            <p className="p-4 text-sm text-slate-500">No results found for "{query}"</p>
           )}
         </div>
       )}
