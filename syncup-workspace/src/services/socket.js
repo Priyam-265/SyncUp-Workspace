@@ -11,8 +11,10 @@ class SocketService {
   connect() {
     if (this.socket?.connected) return;
 
-    // Vite proxy forwards /socket.io to backend
-    this.socket = io('/', {
+    const backendUrl = import.meta.env.VITE_API_URL || '';
+
+    // Connect to the actual backend URL
+    this.socket = io(backendUrl, {
       transports: ['websocket', 'polling'],
       withCredentials: true,
     });
