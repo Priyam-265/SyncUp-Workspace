@@ -11,11 +11,13 @@ const generateTokenAndSetCookie = (userId, res) => {
     expiresIn: process.env.JWT_EXPIRES_IN || "7d",
   });
 
+  const isProduction = process.env.NODE_ENV === "production" || (process.env.FRONTEND_URL && !process.env.FRONTEND_URL.includes('localhost'));
+
   res.cookie("jwt", token, {
     maxAge: (Number(process.env.COOKIE_EXPIRES_IN) || 7) * 24 * 60 * 60 * 1000, // days → ms
     httpOnly: true, // prevent XSS attacks
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    secure: process.env.NODE_ENV === "production",
+    sameSite: isProduction ? "none" : "lax",
+    secure: isProduction,
   });
 
   return token;
