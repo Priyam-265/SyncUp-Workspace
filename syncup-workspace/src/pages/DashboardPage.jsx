@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Hash, Lock, Settings, MoreVertical, Plus, ChevronDown, Moon, Sun, LogOut, UserPlus, Copy, Check
+  Hash, Lock, Settings, MoreVertical, Plus, ChevronDown, Moon, Sun, LogOut, UserPlus, Copy, Check, Trash2
 } from 'lucide-react';
 import SearchBar from '../components/SearchBar';
 import DirectMessageList from '../components/DirectMessageList';
@@ -12,8 +12,14 @@ import AddMemberModal from '../components/AddMemberModal';
 import UserAvatar from '../components/UserAvatar';
 import { useTheme } from '../context/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { messageAPI, channelAPI } from '../services/api';
+import { messageAPI, channelAPI, workspaceAPI } from '../services/api';
 import { socketService } from '../services/socket';
+
+// Helper to check if a value is an image URL or data URI
+const isImageUrl = (val) => {
+  if (!val || typeof val !== 'string') return false;
+  return val.startsWith('http') || val.startsWith('data:') || val.startsWith('/') || val.startsWith('blob:');
+};
 
 const DashboardPage = () => {
   const navigate = useNavigate();
@@ -32,6 +38,10 @@ const DashboardPage = () => {
   const [activeWorkspace, setActiveWorkspace] = useState(null);
   const [showInviteCode, setShowInviteCode] = useState(false);
   const [copiedInvite, setCopiedInvite] = useState(false);
+  const [channelToDelete, setChannelToDelete] = useState(null);
+  const [channelMenuId, setChannelMenuId] = useState(null);
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [workspaceToLeave, setWorkspaceToLeave] = useState(null);
 
   // Refs to avoid stale closures and prevent re-render loops
   const dmChannelIdRef = useRef(null);
@@ -55,7 +65,12 @@ const DashboardPage = () => {
         // Merge channels from workspace but preserve existing unread counts
         setChannels(prev => {
           const newChannels = ws.channels || [];
-          if (prev.length === 0) return newChannels;
+          if (prev.length === 0) {
+            return newChannels.map(c => {
+              const stored = localStorage.getItem(`unread_ch_${c._id}`);
+              return { ...c, unread: stored ? parseInt(stored, 10) : 0 };
+            });
+          }
           // Carry forward unread counts from previous state
           const unreadMap = {};
           prev.forEach(c => { if (c.unread) unreadMap[c._id] = c.unread; });
@@ -88,6 +103,13 @@ const DashboardPage = () => {
           mappedMembers.push(appUser);
         }
         setAllUsers(prev => {
+          if (prev.length === 0) {
+            return mappedMembers.map(u => {
+              const stored = localStorage.getItem(`unread_dm_${workspaceId}_${u.id}`);
+              return { ...u, unread: stored ? parseInt(stored, 10) : 0 };
+            });
+          }
+          // Keep existing unread counts when users array refreshes
           const unreadMap = {};
           prev.forEach(u => { if (u.unread) unreadMap[u.id] = u.unread; });
           return mappedMembers.map(u => ({ ...u, unread: unreadMap[u.id] || 0 }));
@@ -95,6 +117,16 @@ const DashboardPage = () => {
       }
     }
   }, [workspaceId, workspaces, currentUser]);
+
+  // Close channel context menu on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (!e.target.closest('.ch-context-menu')) setChannelMenuId(null);
+      if (!e.target.closest('.ws-context-menu')) setWorkspaceMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   // Effect 3: Socket connection for workspace
   useEffect(() => {
@@ -106,12 +138,19 @@ const DashboardPage = () => {
     const onPresenceChange = ({ userId: uid, status }) => {
       setAllUsers(prev => prev.map(u => u.id === uid ? { ...u, status } : u));
     };
+    
+    const onMemberLeft = ({ userId: uid }) => {
+      setAllUsers(prev => prev.filter(u => String(u.id) !== String(uid)));
+    };
+
     socketService.on('user-status-changed', onPresenceChange);
+    socketService.on('member-left', onMemberLeft);
 
     return () => {
       socketService.emit('user-offline', { userId: currentUser._id, workspaceId: activeWorkspace._id });
       socketService.leaveWorkspace(activeWorkspace._id);
       socketService.off('user-status-changed', onPresenceChange);
+      socketService.off('member-left', onMemberLeft);
     };
   }, [activeWorkspace?._id, currentUser?._id]);
 
@@ -232,16 +271,27 @@ const DashboardPage = () => {
           return [...prev, mapped];
         });
       } else {
-        setChannels(prev => prev.map(c =>
-          String(c._id) === String(msgChId) ? { ...c, unread: (c.unread || 0) + 1 } : c
-        ));
-        
+        // Track unread on the channel
+        setChannels(prev => prev.map(c => {
+          if (String(c._id) === String(msgChId)) {
+            const newUnread = (c.unread || 0) + 1;
+            localStorage.setItem(`unread_ch_${c._id}`, newUnread.toString());
+            return { ...c, unread: newUnread };
+          }
+          return c;
+        }));
+
         // Also track unread for Direct Messages (if the message came from a user)
         const senderId = typeof msg.sender === 'object' ? msg.sender._id : msg.sender;
         if (senderId) {
-          setAllUsers(prev => prev.map(u => 
-            String(u.id) === String(senderId) ? { ...u, unread: (u.unread || 0) + 1 } : u
-          ));
+          setAllUsers(prev => prev.map(u => {
+            if (String(u.id) === String(senderId)) {
+              const newUnread = (u.unread || 0) + 1;
+              localStorage.setItem(`unread_dm_${activeWorkspace._id}_${senderId}`, newUnread.toString());
+              return { ...u, unread: newUnread };
+            }
+            return u;
+          }));
         }
       }
     };
@@ -319,18 +369,59 @@ const DashboardPage = () => {
     }
   }, []);
 
+  const handleDeleteChannel = useCallback(async () => {
+    if (!channelToDelete || !activeWorkspace) return;
+    try {
+      await channelAPI.delete(channelToDelete._id);
+      // Remove channel from local state immediately
+      setChannels(prev => prev.filter(c => c._id !== channelToDelete._id));
+      // Remove from cache
+      delete messagesCache.current[channelToDelete._id];
+      // If the deleted channel was active, redirect to first available channel
+      if (activeChat && activeChat.type === 'channel' && activeChat.id === channelToDelete._id) {
+        const remaining = channels.filter(c => c._id !== channelToDelete._id && !c.name?.startsWith('DM-'));
+        if (remaining.length > 0) {
+          prevChannelId.current = null;
+          navigate(`/dashboard/${activeWorkspace._id}/channel/${remaining[0]._id}`);
+        } else {
+          setActiveChat(null);
+          setMessages([]);
+          navigate(`/dashboard/${activeWorkspace._id}`);
+        }
+      }
+      setChannelToDelete(null);
+    } catch (err) {
+      console.error('Failed to delete channel:', err);
+    }
+  }, [channelToDelete, activeWorkspace, activeChat, channels, navigate]);
+
+  const handleLeaveWorkspace = useCallback(async () => {
+    if (!workspaceToLeave) return;
+    try {
+      await workspaceAPI.leave(workspaceToLeave._id, currentUser._id || currentUser.id);
+      setWorkspaceToLeave(null);
+      navigate('/workspaces');
+    } catch (err) {
+      console.error('Failed to leave workspace:', err);
+    }
+  }, [workspaceToLeave, currentUser, navigate]);
+
   const handleSelectChannel = (channel) => {
     setChannels(prev => prev.map(c => String(c._id) === String(channel._id) ? { ...c, unread: 0 } : c));
+    localStorage.removeItem(`unread_ch_${channel._id}`);
     prevChannelId.current = null; // force re-fetch
     prevUserId.current = null;
     navigate(`/dashboard/${activeWorkspace._id}/channel/${channel._id}`);
+    if (window.innerWidth < 768) setIsSidebarOpen(false);
   };
 
   const handleSelectUser = (user) => {
     setAllUsers(prev => prev.map(u => String(u.id) === String(user.id) ? { ...u, unread: 0 } : u));
+    localStorage.removeItem(`unread_dm_${activeWorkspace._id}_${user.id}`);
     prevChannelId.current = null;
     prevUserId.current = null;
     navigate(`/dashboard/${activeWorkspace._id}/dm/${user.id}`);
+    if (window.innerWidth < 768) setIsSidebarOpen(false);
   };
 
   const handleCreateChannel = async (channelName, isPrivate) => {
@@ -414,7 +505,11 @@ const DashboardPage = () => {
           const totalUnread = isActive ? (channels.reduce((s, c) => s + (c.unread || 0), 0) + allUsers.reduce((s, u) => s + (u.unread || 0), 0)) : 0;
           return (
           <button key={ws._id} onClick={() => handleSwitchWorkspace(ws)} className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white font-bold text-sm shadow-lg transition-all hover:rounded-xl relative ${isActive ? 'bg-gradient-to-br from-blue-500 to-cyan-500 ring-2 ring-white/30' : 'bg-slate-700 dark:bg-[#31363F] hover:bg-gradient-to-br hover:from-blue-500 hover:to-cyan-500 opacity-60 hover:opacity-100'}`} title={ws.name}>
-            {(ws.icon || ws.name.substring(0, 2)).toUpperCase()}
+            {ws.icon && isImageUrl(ws.icon) ? (
+              <img src={ws.icon} alt={ws.name} className="w-full h-full object-cover rounded-[inherit]" />
+            ) : (
+              (ws.icon || ws.name.substring(0, 2)).toUpperCase()
+            )}
             {totalUnread > 0 && (
               <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full shadow-md">
                 {totalUnread > 9 ? '9+' : totalUnread}
@@ -431,15 +526,48 @@ const DashboardPage = () => {
       {/* Left Sidebar */}
       <div className="w-64 bg-blue-600 dark:bg-[#222831] flex flex-col border-r border-blue-500/50 dark:border-[#76ABAE]/20 transition-colors duration-500">
         <div className="p-3 border-b border-blue-500/50 dark:border-[#76ABAE]/20">
-          <div className="flex items-center justify-between p-2">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">{activeWorkspace.icon}</span>
-              <div className="text-left">
-                <div className="text-white font-bold text-sm truncate max-w-[140px]">{activeWorkspace.name}</div>
-                <div className="text-blue-200 dark:text-[#EEEEEE]/50 text-xs">{allUsers.length} members</div>
+          <div className="relative ws-context-menu">
+            <div 
+              onClick={() => setWorkspaceMenuOpen(!workspaceMenuOpen)}
+              className="flex items-center justify-between p-2 hover:bg-white/10 dark:hover:bg-[#31363F] rounded-xl cursor-pointer transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 flex items-center justify-center bg-blue-500/50 dark:bg-[#76ABAE]/20 rounded-lg text-lg overflow-hidden shrink-0">
+                  {activeWorkspace.icon && isImageUrl(activeWorkspace.icon) ? (
+                    <img src={activeWorkspace.icon} alt={activeWorkspace.name} className="w-full h-full object-cover" />
+                  ) : (
+                    activeWorkspace.icon || '🏢'
+                  )}
+                </div>
+                <div className="text-left">
+                  <div className="text-white font-bold text-sm truncate max-w-[140px]">{activeWorkspace.name}</div>
+                  <div className="text-blue-200 dark:text-[#EEEEEE]/50 text-xs">{allUsers.length} members</div>
+                </div>
               </div>
+              <ChevronDown className="w-4 h-4 text-blue-200 dark:text-[#EEEEEE]/50" />
             </div>
-            <ChevronDown className="w-4 h-4 text-blue-200 dark:text-[#EEEEEE]/50" />
+            
+            {/* Workspace Header Context Menu */}
+            {workspaceMenuOpen && (
+              <div className="absolute top-full left-0 mt-1 w-full bg-white/95 dark:bg-[#31363F]/95 backdrop-blur-xl rounded-xl shadow-2xl border border-slate-200/50 dark:border-[#76ABAE]/20 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150">
+                {activeWorkspace?.owner && currentUser && String(activeWorkspace.owner._id || activeWorkspace.owner) !== String(currentUser._id || currentUser.id) && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setWorkspaceMenuOpen(false); setWorkspaceToLeave(activeWorkspace); }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Leave Workspace
+                  </button>
+                )}
+                <button
+                  onClick={() => { setWorkspaceMenuOpen(false); navigate('/workspaces'); }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 dark:text-[#EEEEEE] hover:bg-slate-50 dark:hover:bg-[#222831]/60 transition-colors border-t border-slate-200/50 dark:border-[#76ABAE]/20"
+                >
+                  <Hash className="w-4 h-4 text-slate-400 dark:text-[#EEEEEE]/50" />
+                  Switch Workspace
+                </button>
+              </div>
+            )}
           </div>
           <button onClick={() => setAddMemberModalOpen(true)} className="w-full mt-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-500/30 dark:bg-[#76ABAE]/20 hover:bg-blue-500/50 dark:hover:bg-[#76ABAE]/30 rounded-xl transition-colors text-white dark:text-[#76ABAE] text-sm font-semibold">
             <UserPlus className="w-4 h-4" /> Add Member
@@ -459,19 +587,49 @@ const DashboardPage = () => {
               </button>
             </div>
             <div className="space-y-0.5">
-              {channels.filter(c => !c.name?.startsWith('DM-')).map((channel) => (
-                <button key={channel._id} onClick={() => handleSelectChannel(channel)} className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all group ${activeChat && activeChat.type === 'channel' && activeChat.id === channel._id ? 'bg-blue-500 dark:bg-[#76ABAE]/30 text-white' : 'text-blue-100 dark:text-[#EEEEEE]/70 hover:bg-blue-500/60 dark:hover:bg-[#31363F]'}`}>
-                  <div className="flex items-center gap-2">
-                    {channel.isPrivate ? <Lock className="w-4 h-4" /> : <Hash className="w-4 h-4" />}
-                    <span className="text-sm font-medium">{channel.name}</span>
-                  </div>
-                  {channel.unread > 0 && (
-                    <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full shadow-sm">
-                      {channel.unread > 9 ? '9+' : channel.unread}
-                    </span>
+              {channels.filter(c => !c.name?.startsWith('DM-')).map((channel) => {
+                const isOwner = activeWorkspace?.owner && currentUser && String(activeWorkspace.owner._id || activeWorkspace.owner) === String(currentUser._id || currentUser.id);
+                return (
+                <div key={channel._id} className="relative group/ch">
+                  <button
+                    onClick={() => handleSelectChannel(channel)}
+                    onContextMenu={(e) => { e.preventDefault(); if (isOwner) setChannelMenuId(channelMenuId === channel._id ? null : channel._id); }}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all ${activeChat && activeChat.type === 'channel' && activeChat.id === channel._id ? 'bg-blue-500 dark:bg-[#76ABAE]/30 text-white' : 'text-blue-100 dark:text-[#EEEEEE]/70 hover:bg-blue-500/60 dark:hover:bg-[#31363F]'}`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      {channel.isPrivate ? <Lock className="w-4 h-4 shrink-0" /> : <Hash className="w-4 h-4 shrink-0" />}
+                      <span className="text-sm font-medium truncate">{channel.name}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {channel.unread > 0 && (
+                        <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full shadow-sm whitespace-nowrap">
+                          {channel.unread >= 9 ? '9+ new messages' : channel.unread === 1 ? '1 new message' : `${channel.unread} new messages`}
+                        </span>
+                      )}
+                      {isOwner && (
+                        <span
+                          onClick={(e) => { e.stopPropagation(); setChannelMenuId(channelMenuId === channel._id ? null : channel._id); }}
+                          className="p-0.5 rounded hover:bg-white/20 transition-all cursor-pointer"
+                        >
+                          <MoreVertical className="w-3.5 h-3.5" />
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                  {/* Channel context menu */}
+                  {channelMenuId === channel._id && (
+                    <div className="ch-context-menu absolute left-full top-0 ml-1 w-48 bg-white/95 dark:bg-[#31363F]/95 backdrop-blur-xl rounded-xl shadow-2xl border border-slate-200/50 dark:border-[#76ABAE]/20 overflow-hidden z-50">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setChannelMenuId(null); setChannelToDelete(channel); }}
+                        className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Delete Channel
+                      </button>
+                    </div>
                   )}
-                </button>
-              ))}
+                </div>
+              );})}
             </div>
           </div>
           <div className="mb-4">
@@ -570,6 +728,64 @@ const DashboardPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Delete Channel Confirmation Modal */}
+      {channelToDelete && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-6 z-[60]" onClick={() => setChannelToDelete(null)}>
+          <div className="bg-white/95 dark:bg-[#31363F]/95 backdrop-blur-xl rounded-2xl p-8 max-w-sm w-full shadow-2xl border border-slate-200/50 dark:border-[#76ABAE]/20" onClick={e => e.stopPropagation()}>
+            <div className="w-16 h-16 bg-red-100 dark:bg-red-500/20 text-red-500 rounded-2xl flex items-center justify-center mb-6 mx-auto">
+              <Trash2 className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-bold mb-2 text-slate-900 dark:text-white text-center">Delete Channel?</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-300 mb-8 text-center leading-relaxed">
+              Are you sure you want to delete <span className="font-bold text-slate-900 dark:text-white">#{channelToDelete.name}</span>? This cannot be undone. All messages will be permanently removed.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setChannelToDelete(null)}
+                className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-[#222831] dark:hover:bg-black/40 text-slate-700 dark:text-white rounded-xl font-bold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteChannel}
+                className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold shadow-lg shadow-red-500/30 transition-all active:scale-95"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leave Workspace Confirmation Modal */}
+      {workspaceToLeave && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-6 z-[60]" onClick={() => setWorkspaceToLeave(null)}>
+          <div className="bg-white/95 dark:bg-[#31363F]/95 backdrop-blur-xl rounded-2xl p-8 max-w-sm w-full shadow-2xl border border-slate-200/50 dark:border-[#76ABAE]/20" onClick={e => e.stopPropagation()}>
+            <div className="w-16 h-16 bg-red-100 dark:bg-red-500/20 text-red-500 rounded-2xl flex items-center justify-center mb-6 mx-auto">
+              <LogOut className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-bold mb-2 text-slate-900 dark:text-white text-center">Leave Workspace?</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-300 mb-8 text-center leading-relaxed">
+              Are you sure you want to leave <span className="font-bold text-slate-900 dark:text-white">#{workspaceToLeave.name}</span>? You'll need an invite to rejoin.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setWorkspaceToLeave(null)}
+                className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-[#222831] dark:hover:bg-black/40 text-slate-700 dark:text-white rounded-xl font-bold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleLeaveWorkspace}
+                className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold shadow-lg shadow-red-500/30 transition-all active:scale-95"
+              >
+                Leave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

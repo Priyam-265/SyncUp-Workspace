@@ -44,6 +44,15 @@ export const WorkspaceProvider = ({ children }) => {
     }
   };
 
+  const deleteWorkspace = async (id) => {
+    try {
+      await workspaceAPI.delete(id);
+      setWorkspaces(prev => prev.filter(w => w._id !== id));
+    } catch (error) {
+      throw error;
+    }
+  };
+
   // Generate an invite object from a workspace's existing inviteCode
   const createInvite = useCallback((workspaceId) => {
     const ws = workspaces.find(w => w._id === workspaceId);
@@ -61,6 +70,7 @@ export const WorkspaceProvider = ({ children }) => {
       fetchWorkspaces,
       createWorkspace,
       joinWorkspace,
+      deleteWorkspace,
       createInvite
     }}>
       {children}

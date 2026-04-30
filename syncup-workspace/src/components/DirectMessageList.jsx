@@ -33,8 +33,8 @@ const DirectMessageList = ({ users, onSelectUser, activeChat, onOpenCreateDmModa
               <span className="text-sm font-medium">{user.name}</span>
             </div>
             {user.unread > 0 && (
-              <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full shadow-sm">
-                {user.unread > 9 ? '9+' : user.unread}
+              <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full shadow-sm whitespace-nowrap">
+                {user.unread >= 9 ? '9+ new messages' : user.unread === 1 ? '1 new message' : `${user.unread} new messages`}
               </span>
             )}
           </button>

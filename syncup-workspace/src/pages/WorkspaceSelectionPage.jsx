@@ -1,11 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { gsap } from 'gsap';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Users, Hash, Zap, ArrowRight, Building2, X, Link, Mail, Copy, Check, LogIn, AtSign, ChevronDown, LogOut, User } from 'lucide-react';
+import { Plus, Users, Hash, Zap, ArrowRight, Building2, X, Link, Mail, Copy, Check, LogIn, AtSign, ChevronDown, LogOut, User, Trash2, MoreVertical, Pencil } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 
 const generateInviteLink = (code) => `${window.location.origin}/workspaces?join=${code}`;
+
+// Helper to check if a value is an image URL or data URI
+const isImageUrl = (val) => {
+  if (!val || typeof val !== 'string') return false;
+  return val.startsWith('http') || val.startsWith('data:') || val.startsWith('/') || val.startsWith('blob:');
+};
+
+// Renders an icon value as <img> or emoji/text fallback
+const WorkspaceIcon = ({ icon, name, size = 'w-14 h-14', textSize = 'text-2xl', className = '' }) => {
+  if (isImageUrl(icon)) {
+    return <img src={icon} alt={name || 'Workspace'} className={`${size} object-cover ${className}`} />;
+  }
+  return <span className={textSize}>{icon || '🏢'}</span>;
+};
 
 // ── Glass Filter SVG (required for liquid glass effect) ─────────────
 function GlassFilter() {
@@ -151,7 +165,7 @@ const WORKSPACE_NAVBAR_CSS = `
 const WorkspaceSelectionPage = () => {
   const navigate = useNavigate();
   const { currentUser, logout } = useTheme();
-  const { workspaces, loading, fetchWorkspaces, createWorkspace, joinWorkspace } = useWorkspace();
+  const { workspaces, loading, fetchWorkspaces, createWorkspace, joinWorkspace, deleteWorkspace } = useWorkspace();
 
   useEffect(() => {
     fetchWorkspaces();
@@ -167,6 +181,9 @@ const WorkspaceSelectionPage = () => {
   const [joinValue, setJoinValue] = useState('');
   const [joinError, setJoinError] = useState('');
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const [workspaceToDelete, setWorkspaceToDelete] = useState(null);
+  const [workspaceToLeave, setWorkspaceToLeave] = useState(null);
+  const [menuOpenWorkspaceId, setMenuOpenWorkspaceId] = useState(null);
 
   const mainRef = useRef(null);
   const createModalRef = useRef(null);
@@ -182,7 +199,8 @@ const WorkspaceSelectionPage = () => {
   // workspaces are fetched from context
 
   // Build user avatar
-  const userAvatar = currentUser?.avatar || (currentUser?.displayName || currentUser?.fullName || 'U').substring(0, 2).toUpperCase();
+  const userAvatarRaw = currentUser?.avatar || '';
+  const userInitials = (currentUser?.displayName || currentUser?.fullName || 'U').substring(0, 2).toUpperCase();
   const userName = currentUser?.displayName || currentUser?.fullName || 'User';
   const userEmail = currentUser?.email || 'user@email.com';
 
@@ -201,10 +219,14 @@ const WorkspaceSelectionPage = () => {
       if (profileDropdownRef.current && !profileDropdownRef.current.contains(e.target)) {
         setShowProfileDropdown(false);
       }
+      // Close workspace context menu on outside click
+      if (menuOpenWorkspaceId && !e.target.closest('.ws-context-menu')) {
+        setMenuOpenWorkspaceId(null);
+      }
     };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
+  }, [menuOpenWorkspaceId]);
 
   // ── Animations ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -394,6 +416,27 @@ const WorkspaceSelectionPage = () => {
 
 
 
+  const handleDeleteConfirm = async () => {
+    if (!workspaceToDelete) return;
+    try {
+      await deleteWorkspace(workspaceToDelete._id);
+      setWorkspaceToDelete(null);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleLeaveConfirm = async () => {
+    if (!workspaceToLeave) return;
+    try {
+      await workspaceAPI.leave(workspaceToLeave._id, currentUser._id || currentUser.id);
+      setWorkspaces(prev => prev.filter(w => String(w._id) !== String(workspaceToLeave._id)));
+      setWorkspaceToLeave(null);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-[#222831] text-slate-900 dark:text-[#EEEEEE] transition-colors duration-500 font-sans overflow-hidden">
       <GlassFilter />
@@ -432,8 +475,12 @@ const WorkspaceSelectionPage = () => {
                 }}
                 className="hover:bg-black/5 dark:hover:bg-white/5"
               >
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-lg">
-                  {userAvatar}
+                <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-lg overflow-hidden">
+                  {isImageUrl(userAvatarRaw) ? (
+                    <img src={userAvatarRaw} alt={userName} className="w-full h-full object-cover" />
+                  ) : (
+                    userInitials
+                  )}
                 </div>
                 <ChevronDown style={{ width: 14, height: 14, color: 'var(--t2)', transition: 'transform 0.2s', transform: showProfileDropdown ? 'rotate(180deg)' : 'rotate(0)' }} />
               </button>
@@ -460,8 +507,12 @@ const WorkspaceSelectionPage = () => {
                   {/* User Info */}
                   <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--border)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg">
-                        {userAvatar}
+                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg overflow-hidden">
+                        {isImageUrl(userAvatarRaw) ? (
+                          <img src={userAvatarRaw} alt={userName} className="w-full h-full object-cover" />
+                        ) : (
+                          userInitials
+                        )}
                       </div>
                       <div>
                         <div style={{ fontFamily: 'var(--fb)', fontWeight: 600, fontSize: 14, color: 'var(--t1)' }}>{userName}</div>
@@ -522,19 +573,61 @@ const WorkspaceSelectionPage = () => {
                   <div className="w-8 h-8 border-4 border-blue-500/20 border-t-blue-600 rounded-full animate-spin"></div>
                   <p className="mt-4 text-slate-500">Loading workspaces...</p>
                 </div>
-              ) : workspaces.map((workspace) => (
-                <button
+              ) : workspaces.map((workspace) => {
+                const isOwner = workspace.owner && currentUser && String(workspace.owner._id || workspace.owner) === String(currentUser._id || currentUser.id);
+                return (
+                <div
                   key={workspace._id}
                   onClick={() => navigate(`/dashboard/${workspace._id}`)}
-                  className="workspace-card group bg-white/90 dark:bg-[#31363F]/85 backdrop-blur-xl rounded-[1.5rem] p-6 border border-slate-200/50 dark:border-[#76ABAE]/20 hover:shadow-2xl hover:shadow-blue-500/10 dark:hover:shadow-[#76ABAE]/10 transition-shadow duration-300 text-left"
+                  role="button"
+                  tabIndex={0}
+                  className="workspace-card relative group bg-white/90 dark:bg-[#31363F]/85 backdrop-blur-xl rounded-[1.5rem] p-6 border border-slate-200/50 dark:border-[#76ABAE]/20 hover:shadow-2xl hover:shadow-blue-500/10 dark:hover:shadow-[#76ABAE]/10 transition-shadow duration-300 text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') navigate(`/dashboard/${workspace._id}`); }}
                 >
+                  {/* Three-dot menu */}
+                  <div className="ws-context-menu absolute top-4 right-4 z-20">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); setMenuOpenWorkspaceId(menuOpenWorkspaceId === workspace._id ? null : workspace._id); }}
+                      className="p-2 text-slate-400 hover:text-slate-700 dark:text-[#EEEEEE]/40 dark:hover:text-white bg-white/60 dark:bg-black/20 hover:bg-slate-100 dark:hover:bg-[#222831]/60 rounded-xl transition-all shadow-sm"
+                      title="Workspace options"
+                    >
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+                    {menuOpenWorkspaceId === workspace._id && (
+                      <div className="absolute top-full right-0 mt-1 w-48 bg-white/95 dark:bg-[#31363F]/95 backdrop-blur-xl rounded-xl shadow-2xl border border-slate-200/50 dark:border-[#76ABAE]/20 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                        {isOwner ? (
+                          <>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setMenuOpenWorkspaceId(null); /* TODO: rename */ }}
+                              className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 dark:text-[#EEEEEE] hover:bg-slate-50 dark:hover:bg-[#222831]/60 transition-colors"
+                            >
+                              <Pencil className="w-4 h-4 text-slate-400 dark:text-[#EEEEEE]/50" />
+                              Rename
+                            </button>
+                            <div className="border-t border-slate-200/50 dark:border-[#76ABAE]/20" />
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setMenuOpenWorkspaceId(null); setWorkspaceToDelete(workspace); }}
+                              className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Delete Workspace
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setMenuOpenWorkspaceId(null); setWorkspaceToLeave(workspace); }}
+                            className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                          >
+                            <LogOut className="w-4 h-4" />
+                            Leave Workspace
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <div className="flex items-start justify-between mb-4">
                     <div className={`card-icon w-14 h-14 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-2xl flex items-center justify-center text-2xl shadow-lg overflow-hidden`}>
-                      {workspace.icon && (workspace.icon.startsWith('http') || workspace.icon.startsWith('data:')) ? (
-                        <img src={workspace.icon} alt={workspace.name} className="w-full h-full object-cover" />
-                      ) : (
-                        workspace.icon || '🏢'
-                      )}
+                      <WorkspaceIcon icon={workspace.icon} name={workspace.name} size="w-full h-full" />
                     </div>
                     <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-[#EEEEEE]/50 font-medium">
                       <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
@@ -552,8 +645,8 @@ const WorkspaceSelectionPage = () => {
                     <span className="text-sm font-bold text-blue-600 dark:text-[#76ABAE]">Open workspace</span>
                     <ArrowRight className="card-arrow w-4 h-4 text-blue-600 dark:text-[#76ABAE]" />
                   </div>
-                </button>
-              ))}
+                </div>
+              );})}
 
               {/* Create Card */}
               <button
@@ -649,14 +742,41 @@ const WorkspaceSelectionPage = () => {
                       </button>
                     ))}
                   </div>
+                  
+                  <div className="space-y-2 mt-4 pt-4 border-t border-slate-200 dark:border-[#76ABAE]/20">
+                    <label className="text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-[#EEEEEE]/70 ml-1">Or Upload Custom Icon</label>
+                    <input 
+                      type="file" 
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setNewWorkspace({ ...newWorkspace, icon: reader.result });
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-[#31363F] dark:file:text-[#76ABAE]"
+                    />
+                    <div className="mt-2 text-xs text-center text-slate-400 dark:text-[#EEEEEE]/40">Or paste an image URL below</div>
+                    <input
+                      type="text"
+                      placeholder="https://example.com/icon.png"
+                      value={newWorkspace.icon && newWorkspace.icon.length > 5 ? newWorkspace.icon : ''}
+                      onChange={(e) => setNewWorkspace({ ...newWorkspace, icon: e.target.value })}
+                      className="w-full bg-slate-50 dark:bg-[#222831]/80 border border-slate-200 dark:border-[#76ABAE]/30 px-4 py-2 rounded-xl outline-none text-slate-900 dark:text-[#EEEEEE] focus:border-blue-500 dark:focus:border-[#76ABAE] text-sm"
+                    />
+                  </div>
                 </div>
 
                 {/* Preview */}
                 <div className="bg-slate-50 dark:bg-[#222831]/80 rounded-xl p-4 border border-slate-200 dark:border-[#76ABAE]/20">
                   <p className="text-xs uppercase tracking-wider font-bold text-slate-500 dark:text-[#EEEEEE]/50 mb-3">Preview</p>
                   <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 bg-blue-600 dark:bg-[#76ABAE] rounded-xl flex items-center justify-center text-xl shadow-lg shadow-blue-500/20 dark:shadow-[#76ABAE]/10">
-                      {newWorkspace.icon}
+                    <div className="w-11 h-11 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center text-xl shadow-lg overflow-hidden">
+                      <WorkspaceIcon icon={newWorkspace.icon} name={newWorkspace.name || 'Preview'} size="w-full h-full" textSize="text-xl" />
                     </div>
                     <div>
                       <div className="font-bold text-slate-900 dark:text-[#EEEEEE]">{newWorkspace.name || 'Your Workspace'}</div>
@@ -690,7 +810,14 @@ const WorkspaceSelectionPage = () => {
                   </div>
                   <div>
                     <div className="font-bold text-green-700 dark:text-green-400 text-sm">Workspace created!</div>
-                    <div className="text-xs text-green-600 dark:text-green-500">{createdWorkspace.icon} {createdWorkspace.name}</div>
+                    <div className="text-xs text-green-600 dark:text-green-500 flex items-center gap-1">
+                      {isImageUrl(createdWorkspace.icon) ? (
+                        <img src={createdWorkspace.icon} alt="" className="w-4 h-4 rounded object-cover inline-block" />
+                      ) : (
+                        <span>{createdWorkspace.icon}</span>
+                      )}
+                      {createdWorkspace.name}
+                    </div>
                   </div>
                 </div>
 
@@ -806,6 +933,35 @@ const WorkspaceSelectionPage = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Workspace Modal ───────────────────────────────── */}
+      {workspaceToDelete && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-6 z-[60] animate-in fade-in duration-200">
+          <div className="bg-white/95 dark:bg-[#31363F]/95 backdrop-blur-xl rounded-[2rem] p-8 max-w-sm w-full shadow-2xl border border-slate-200/50 dark:border-[#76ABAE]/20 animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-red-100 dark:bg-red-500/20 text-red-500 rounded-2xl flex items-center justify-center mb-6 mx-auto shadow-inner">
+              <Trash2 className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-bold mb-2 text-slate-900 dark:text-white text-center">Delete Workspace?</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-300 mb-8 text-center leading-relaxed">
+              Are you sure you want to delete <span className="font-bold text-slate-900 dark:text-white">"{workspaceToDelete.name}"</span>? This cannot be undone. All channels, messages, and members will be permanently removed.
+            </p>
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setWorkspaceToDelete(null)}
+                className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-[#222831] dark:hover:bg-black/40 text-slate-700 dark:text-white rounded-xl font-bold transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleDeleteConfirm}
+                className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold shadow-lg shadow-red-500/30 transition-all active:scale-95"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -91,6 +91,10 @@ export const workspaceAPI = {
     method: 'POST',
     body: JSON.stringify({ userId }),
   }),
+  
+  delete: (id) => fetchClient(`/workspaces/${id}`, { method: 'DELETE' }),
+  
+  leave: (workspaceId, userId) => fetchClient(`/workspaces/${workspaceId}/members/${userId}`, { method: 'DELETE' }),
 };
 
 // -----------------------------------------------------------------------------
@@ -118,6 +122,8 @@ export const channelAPI = {
     method: 'POST',
     body: JSON.stringify({ userId }),
   }),
+
+  delete: (channelId) => fetchClient(`/channels/${channelId}`, { method: 'DELETE' }),
 };
 
 // -----------------------------------------------------------------------------

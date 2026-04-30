@@ -1,5 +1,7 @@
 import Workspace from "../models/Workspace.js";
 import Channel from "../models/Channel.js";
+import User from "../models/User.js";
+import { getIo } from "../socket/socket.js";
 
 // GET /api/workspaces — Get all workspaces where user is a member
 export const getWorkspaces = async (req, res) => {
@@ -273,6 +275,13 @@ export const removeMember = async (req, res) => {
       return res.status(400).json({ message: "Cannot remove the workspace owner" });
     }
 
+    // If last member leaving (edge case, usually owner is last but owner cannot leave unless transfer, wait, let's just handle it)
+    if (workspace.members.length === 1 && workspace.members[0].toString() === userId) {
+      await Workspace.findByIdAndDelete(workspace._id);
+      await Channel.deleteMany({ workspace: workspace._id });
+      return res.status(200).json({ message: "Workspace deleted as last member left" });
+    }
+
     // Remove member from workspace
     workspace.members = workspace.members.filter(
       (member) => member.toString() !== userId
@@ -284,6 +293,15 @@ export const removeMember = async (req, res) => {
       { workspace: workspace._id },
       { $pull: { members: userId } }
     );
+
+    // Emit socket event so others in workspace see them leave instantly
+    const io = getIo();
+    if (io) {
+      io.to(`workspace:${workspace._id}`).emit("member-left", {
+        workspaceId: workspace._id,
+        userId: userId,
+      });
+    }
 
     const updatedWorkspace = await Workspace.findById(workspace._id)
       .populate("owner", "fullName email avatar")
